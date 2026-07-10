@@ -1,0 +1,119 @@
+name: CI
+
+on: [push, pull_request]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint & types
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies (locked, reproducible)
+        run: uv sync --locked
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Mypy (strict)
+        run: uv run mypy src
+
+  test:
+    name: test (${{ matrix.os }} / py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install uv and pin the matrix Python
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-suffix: py${{ matrix.python-version }}
+
+      - name: Install dependencies (locked, reproducible)
+        run: uv sync --locked
+
+      # Neste job não há banco: os testes de integração/E2E/doctor se pulam sozinhos.
+      # O job `integration` abaixo os roda de verdade contra um Postgres real.
+      - name: Run tests (unit)
+        run: uv run pytest -q
+
+  integration:
+    name: integration (ubuntu / py3.12)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: demo
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d demo"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies (locked, reproducible)
+        run: uv sync --locked
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # Mesmo schema/seed/usuário read-only da demo local (demo/init/*.sql).
+      - name: Seed database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for f in demo/init/*.sql; do
+            psql -h localhost -U postgres -d demo -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      # Com PG_* no ambiente, integração/E2E/doctor rodam de verdade (read-only,
+      # allowlist, auth, os caminhos que tocam o banco).
+      - name: Run full test suite
+        env:
+          PG_HOST: localhost
+          PG_PORT: "5432"
+          PG_DBNAME: demo
+          PG_USER: mcp_ro
+          PG_PASSWORD: mcp_ro_demo
+          PG_SSLMODE: disable
+        run: uv run pytest -q
