@@ -1,0 +1,26 @@
+# Postgres de demonstração: já sobe semeado e com o usuário read-only mcp_ro pronto.
+# Serve pra experimentar o MCP sem apontar pro seu banco.
+#
+#   docker compose up -d
+#   uv run pg-readonly-mcp --env .env.demo doctor   # deve ficar tudo verde
+#   uv run pg-readonly-mcp --env .env.demo           # sobe o servidor (stdio)
+#
+# Porta 5433 no host pra não colidir com um Postgres que você já tenha na 5432.
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: pg-readonly-mcp-demo
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./demo/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d demo"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
