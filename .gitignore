@@ -1,0 +1,42 @@
+# === Segredos — NUNCA versionar ===
+.env
+.env.*
+!.env.example
+# .env.demo tem credenciais FAKE do Postgres de demonstração (docker compose):
+!.env.demo
+*.cred
+config.yaml
+!config.example.yaml
+audit.log
+*.log
+
+# === Deployments específicos de cada ambiente (PRIVADOS) ===
+# Cada ambiente real (com host/senha/allowlist de verdade) fica aqui e NÃO sobe.
+deployments/*
+!deployments/README.md
+!deployments/_template.md
+
+# === Python ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.uv/
+dist/
+build/
+*.egg-info/
+
+# === Ferramentas / IDE ===
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+.DS_Store
+
+# === Docs internos de desenvolvimento (NAO vao pro repo publico) ===
+# Handoffs de sessao e planos de implementacao ficam so no historico interno.
+docs/HANDOFF.md
+docs/plans/

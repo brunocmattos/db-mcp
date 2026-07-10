@@ -1,0 +1,87 @@
+[project]
+name = "pg-readonly-mcp"
+version = "0.2.0"
+description = "MCP server that gives read-only access to any PostgreSQL database"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "brunocmattos" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "postgresql",
+    "postgres",
+    "read-only",
+    "database",
+    "sql",
+    "llm",
+    "ai",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dependencies = [
+    # Teto no major: o servidor usa caminhos internos do FastMCP
+    # (StaticTokenVerifier, get_access_token) que já mudaram entre versões — um
+    # major novo pode quebrá-los. O lock fixa a versão testada (3.4.x); este teto
+    # impede que uma resolução nova (sem o lock) puxe um major incompatível.
+    "fastmcp>=3.4.4,<4",
+    "psycopg[binary,pool]>=3.2",
+    "sqlglot>=25",
+    "pydantic-settings>=2.4",
+    "pyyaml>=6",
+]
+
+[project.scripts]
+pg-readonly-mcp = "pg_readonly_mcp.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/brunocmattos/pg-readonly-mcp"
+Repository = "https://github.com/brunocmattos/pg-readonly-mcp"
+Issues = "https://github.com/brunocmattos/pg-readonly-mcp/issues"
+Changelog = "https://github.com/brunocmattos/pg-readonly-mcp/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.2.0",
+    "pytest>=8",
+    "ruff>=0.15.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pg_readonly_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pg_readonly_mcp"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["sqlglot.*", "fastmcp.*"]
+ignore_missing_imports = true

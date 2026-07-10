@@ -1,0 +1,13 @@
+transport: stdio          # stdio (dev) ou http (servidor); http exige AUTH_TOKEN no .env
+http_host: 127.0.0.1
+http_port: 8080
+allowlist: ["*"]          # ["*"] = todas; ou ["public.clientes", "public.pedidos"]
+allow_freeform_sql: true
+max_rows: 1000
+max_result_bytes: 1000000
+statement_timeout_ms: 5000
+rate_limit_per_min: 60
+pool_min: 1
+pool_max: 5
+log_level: INFO
+audit_log_path: ./audit.log
