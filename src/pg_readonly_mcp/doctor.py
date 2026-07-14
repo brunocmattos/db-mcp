@@ -49,7 +49,9 @@ VERDE, VERMELHO, AMARELO, CINZA = "\033[32m", "\033[31m", "\033[33m", "\033[90m"
 
 def _habilitar_vt_windows() -> None:
     """Liga o processamento de ANSI no console do Windows (no-op nos demais SOs)."""
-    if os.name != "nt":
+    # sys.platform (não os.name): é o que o mypy entende pra pular o bloco só-Windows quando
+    # checa no Linux (o `ctypes.windll` não existe no typeshed de lá e viraria erro no strict).
+    if sys.platform != "win32":
         return
     try:
         import ctypes
