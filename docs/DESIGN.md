@@ -1,4 +1,4 @@
-# pg-readonly-mcp: documento de design
+# db-mcp: documento de design
 
 > Design do produto: um servidor MCP somente-leitura, genérico, para qualquer PostgreSQL.
 
@@ -50,7 +50,7 @@ Postgres, via config. Nenhuma consulta de negócio fica hardcoded; tudo passa po
 |---|---|---|
 | Manual | Pessoa configurando na mão | `README.md` + `docs/` com passo a passo genérico: pré-requisitos, criar usuário read-only, liberar rede (`pg_hba`), instalar deps, preencher config, rodar, plugar no cliente, troubleshooting. |
 | Assistido (Claude) | Quem tem o Claude Code | `SETUP.md` + uma skill que o Claude lê e executa: pergunta os parâmetros do seu banco, ajuda a criar o usuário, preenche a config, registra o MCP no cliente e roda a verificação. |
-| Terminal | Quem prefere linha de comando | Clonar o repo, `uv sync`, `uv run pg-readonly-mcp doctor` para validar, `uv run pg-readonly-mcp` para subir. |
+| Terminal | Quem prefere linha de comando | Clonar o repo, `uv sync`, `uv run db-mcp doctor` para validar, `uv run db-mcp` para subir. |
 
 ---
 
@@ -220,7 +220,7 @@ Acompanham `.env.example` e `config.example.yaml`, só com placeholders.
 - Dev (máquina local): `TRANSPORT=stdio`, conecta no banco alvo pela rede/VPN, plugado no
   Claude Code/Desktop local. Nesse modo não há auth.
 - Produção (servidor): `TRANSPORT=http` com `AUTH_TOKEN` obrigatório (o servidor não sobe sem
-  ele), rodando como serviço `systemd` (`pg-readonly-mcp.service`). Agentes e automações
+  ele), rodando como serviço `systemd` (`db-mcp.service`). Agentes e automações
   conectam pela rede.
 - Registro no cliente: o `SETUP.md` e a skill geram o trecho de config do cliente MCP.
 
@@ -228,7 +228,7 @@ Acompanham `.env.example` e `config.example.yaml`, só com placeholders.
 
 ## 8. Verificação e tratamento de erros
 
-`pg-readonly-mcp doctor` roda seis checagens e, em cada uma, diz o que passou e o que fazer se
+`db-mcp doctor` roda seis checagens e, em cada uma, diz o que passou e o que fazer se
 falhar: 1. config carregada e válida; 2. TCP alcança host:porta; 3. autentica como o usuário
 read-only; 4. confirma read-only (tenta um write e espera que falhe); 5. tabelas da allowlist
 existem; 6. mede a latência de uma query trivial. As checagens de auth e de read-only só passam
@@ -247,7 +247,7 @@ GitHub Actions no push.
 ## 9. Estrutura do repositório (o que é público vs privado)
 
 ```
-pg-readonly-mcp/
+db-mcp/
 ├── README.md                 # PÚBLICO — visão geral + índice do manual
 ├── LICENSE                   # PÚBLICO — MIT
 ├── pyproject.toml            # PÚBLICO
@@ -258,7 +258,7 @@ pg-readonly-mcp/
 ├── docker-compose.yml         # PÚBLICO — Postgres de demonstração
 ├── .env.demo                  # PÚBLICO — credenciais FAKE da demo
 ├── demo/                      # PÚBLICO — schema/seed/usuário read-only da demo
-├── .claude/skills/setup-pg-readonly-mcp/SKILL.md   # PÚBLICO
+├── .claude/skills/setup-db-mcp/SKILL.md   # PÚBLICO
 ├── docs/                     # PÚBLICO — manual genérico (placeholders)
 │   ├── VISAO-GERAL.md
 │   ├── DESIGN.md
@@ -266,7 +266,7 @@ pg-readonly-mcp/
 │   ├── 02-preparar-o-banco.md    # runbook GENÉRICO: usuário read-only + pg_hba
 │   ├── 03-arquitetura.md
 │   └── 04-troubleshooting.md
-├── src/pg_readonly_mcp/       # PÚBLICO — o código genérico
+├── src/db_mcp/       # PÚBLICO — o código genérico
 │   ├── (config, db, server, observability, cli, doctor, errors).py + py.typed
 │   └── guardrails/ (sql, policy, ratelimit).py
 ├── tests/                     # PÚBLICO

@@ -14,7 +14,7 @@ from pydantic_settings import (
 # Qual config.yaml o load() atual está usando. É um ContextVar (não um atributo de
 # classe) pra que `load()` não mute estado global: cada chamada seta o seu valor e
 # o reseta no fim, e chamadas concorrentes não se atropelam.
-_yaml_file_atual: ContextVar[str] = ContextVar("pg_readonly_mcp_yaml_file", default="config.yaml")
+_yaml_file_atual: ContextVar[str] = ContextVar("db_mcp_yaml_file", default="config.yaml")
 
 
 class Settings(BaseSettings):

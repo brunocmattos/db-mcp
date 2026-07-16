@@ -82,7 +82,7 @@ ou `sudo systemctl reload postgresql`.
 Da máquina que vai rodar o MCP (com a rede/VPN ativa):
 
 ```bash
-uv run pg-readonly-mcp doctor
+uv run db-mcp doctor
 ```
 
 As 6 checagens devem passar. Se "TCP inacessível", olhe a rede e o `pg_hba`. Se "Falha de

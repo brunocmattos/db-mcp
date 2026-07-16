@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from pg_readonly_mcp.config import Settings
-from pg_readonly_mcp.errors import SomenteLeitura, SqlInvalido
-from pg_readonly_mcp.server import (
+from db_mcp.config import Settings
+from db_mcp.errors import SomenteLeitura, SqlInvalido
+from db_mcp.server import (
     Nucleo,
     _identificar_cliente,
     _validar_ident,
@@ -63,7 +63,7 @@ def test_consulta_rejeitada_entra_na_auditoria(monkeypatch, tmp_path):
 def test_erro_do_banco_e_auditado(monkeypatch, tmp_path):
     # Um erro vindo do banco (já embrulhado em ErroBanco pelo db.py) tem que virar
     # linha de auditoria, não escapar silencioso.
-    from pg_readonly_mcp.errors import ErroBanco
+    from db_mcp.errors import ErroBanco
 
     class DBQuebrado:
         def executar(self, sql, max_rows):
@@ -78,7 +78,7 @@ def test_erro_do_banco_e_auditado(monkeypatch, tmp_path):
 
 
 def test_resultado_grande_demais_e_auditado(monkeypatch, tmp_path):
-    from pg_readonly_mcp.errors import ResultadoGrandeDemais
+    from db_mcp.errors import ResultadoGrandeDemais
 
     class DBGrande:
         def executar(self, sql, max_rows):
@@ -95,7 +95,7 @@ def test_resultado_grande_demais_e_auditado(monkeypatch, tmp_path):
 
 
 def test_limite_de_taxa_via_nucleo_e_auditado(monkeypatch, tmp_path):
-    from pg_readonly_mcp.errors import LimiteDeTaxa
+    from db_mcp.errors import LimiteDeTaxa
 
     log = tmp_path / "a.log"
     s = _settings(monkeypatch, audit_log_path=str(log), rate_limit_per_min=1)
@@ -155,12 +155,12 @@ def test_servidor_sem_auth_token_fica_sem_auth(monkeypatch):
 def test_cli_recusa_http_sem_token(monkeypatch):
     # Fail-closed: em TRANSPORT=http sem AUTH_TOKEN o servidor não pode subir (senão o
     # endpoint HTTP ficaria aberto). A checagem acontece antes de tocar no banco.
-    from pg_readonly_mcp import cli
+    from db_mcp import cli
 
     for k, v in {"PG_HOST": "h", "PG_DBNAME": "d", "PG_PASSWORD": "p", "TRANSPORT": "http"}.items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("AUTH_TOKEN", raising=False)
-    monkeypatch.setattr("sys.argv", ["pg-readonly-mcp", "--env", "/nao/existe", "run"])
+    monkeypatch.setattr("sys.argv", ["db-mcp", "--env", "/nao/existe", "run"])
     with pytest.raises(SystemExit):
         cli.main()
 
@@ -174,5 +174,5 @@ def test_identificar_cliente_usa_client_id_do_token(monkeypatch):
     class _Token:
         client_id = "agente-x"
 
-    monkeypatch.setattr("pg_readonly_mcp.server.get_access_token", lambda: _Token())
+    monkeypatch.setattr("db_mcp.server.get_access_token", lambda: _Token())
     assert _identificar_cliente() == "agente-x"

@@ -20,7 +20,7 @@ def montar(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="pg-readonly-mcp")
+    parser = argparse.ArgumentParser(prog="db-mcp")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--env", default=".env")
     sub = parser.add_subparsers(dest="cmd")

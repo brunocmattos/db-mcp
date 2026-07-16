@@ -99,13 +99,11 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
     # Auth só vale no transporte HTTP; o FastMCP a ignora no stdio. Sem AUTH_TOKEN,
     # auth=None — e o cli recusa subir em HTTP sem token (ver cli.main).
     auth = (
-        StaticTokenVerifier(
-            tokens={s.auth_token: {"client_id": "pg-readonly-mcp", "scopes": ["read"]}}
-        )
+        StaticTokenVerifier(tokens={s.auth_token: {"client_id": "db-mcp", "scopes": ["read"]}})
         if s.auth_token
         else None
     )
-    mcp = FastMCP(name="pg-readonly-mcp", auth=auth)
+    mcp = FastMCP(name="db-mcp", auth=auth)
     if not conectar:  # usado nos testes (não abre conexão com o banco)
         return mcp
     nucleo = Nucleo(s)

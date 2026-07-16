@@ -18,7 +18,7 @@ responde perguntas sobre os dados sozinho. Perigoso, porque um modelo de linguag
 imprevisível: basta um `DROP TABLE` alucinado, um `UPDATE` sem `WHERE`, ou uma query que puxa
 dez milhões de linhas e trava tudo.
 
-O pg-readonly-mcp **assume que o agente vai errar e deixa o caminho seguro mesmo assim.** Se o
+O db-mcp **assume que o agente vai errar e deixa o caminho seguro mesmo assim.** Se o
 modelo tentar escrever, o banco recusa; se pedir uma tabela que não devia, a aplicação barra;
 se pedir linhas demais, existe um teto.
 
@@ -43,7 +43,7 @@ libera exatamente aquela tabela, e trocar o schema (`secret.clientes`) não fura
 
 ## As peças do código
 
-Tudo vive em `src/pg_readonly_mcp/`. O desenho é um **núcleo isolado** — as regras mais o
+Tudo vive em `src/db_mcp/`. O desenho é um **núcleo isolado** — as regras mais o
 acesso ao banco — com uma casca MCP fina por cima. O núcleo não sabe se está falando stdio ou
 HTTP; recebe uma chamada, roda os guardrails, executa. Por isso a lógica toda é testável sem
 subir servidor nem falar com um cliente MCP de verdade.
@@ -93,8 +93,8 @@ O passo a passo completo está em [`01-instalacao.md`](01-instalacao.md); o prep
 ```bash
 uv sync                       # instala tudo
 cp .env.example .env          # preencha host, banco, senha do usuário read-only
-uv run pg-readonly-mcp doctor # verifica config, rede, auth, read-only, allowlist, latência
-uv run pg-readonly-mcp        # sobe o servidor (stdio)
+uv run db-mcp doctor # verifica config, rede, auth, read-only, allowlist, latência
+uv run db-mcp        # sobe o servidor (stdio)
 ```
 
 Para ver funcionando sem preparar banco nenhum, a seção **"Experimente em 30 segundos"** do
@@ -106,7 +106,7 @@ criar o usuário read-only, preenche a config e registra o MCP no cliente.
 
 ## O `doctor`: a prova de que está tudo certo
 
-Antes de plugar num agente, `pg-readonly-mcp doctor` roda seis checagens e diz, uma a uma, o que
+Antes de plugar num agente, `db-mcp doctor` roda seis checagens e diz, uma a uma, o que
 passou e o que fazer se falhar: config válida, TCP alcança o host, autentica como o usuário
 read-only, **confirma que é read-only de verdade** (tenta uma escrita e espera levar não),
 tabelas da allowlist existem, e a latência de uma query trivial. Sai com código `0` se tudo

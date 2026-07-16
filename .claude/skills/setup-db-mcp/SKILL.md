@@ -1,9 +1,9 @@
 ---
-name: setup-pg-readonly-mcp
-description: Use quando o usuário quiser INSTALAR/CONFIGURAR o pg-readonly-mcp apontando pro banco PostgreSQL dele — pergunta os parâmetros de conexão, ajuda a criar o usuário read-only, escreve .env/config.yaml, roda o doctor e registra o MCP no cliente. Dispare com pedidos como "instala o pg-readonly-mcp", "configura o MCP read-only no meu banco", "conecta isso no meu Postgres".
+name: setup-db-mcp
+description: Use quando o usuário quiser INSTALAR/CONFIGURAR o db-mcp apontando pro banco PostgreSQL dele — pergunta os parâmetros de conexão, ajuda a criar o usuário read-only, escreve .env/config.yaml, roda o doctor e registra o MCP no cliente. Dispare com pedidos como "instala o db-mcp", "configura o MCP read-only no meu banco", "conecta isso no meu Postgres".
 ---
 
-# Instalar o pg-readonly-mcp
+# Instalar o db-mcp
 
 Você vai guiar o usuário a instalar este projeto apontando pro Postgres dele. Trabalhe na
 raiz do projeto (onde estão `pyproject.toml` e `.env.example`). Não comite segredos: `.env`
@@ -30,7 +30,7 @@ tabelas ou ajustar limites, copie `config.example.yaml` para `config.yaml` e aju
 
 ## Passo 4: instalar e verificar
 
-Rode `uv sync`, depois `uv run pg-readonly-mcp doctor`. Leia a saída e, para cada `[X]`,
+Rode `uv sync`, depois `uv run db-mcp doctor`. Leia a saída e, para cada `[X]`,
 explique a causa e a correção (use `docs/04-troubleshooting.md`). Não prossiga enquanto o
 doctor não sair com código 0. A checagem "Somente-leitura confirmado" é a crítica: se ela
 falha, o usuário do banco consegue escrever, o que é um problema de segurança real a corrigir
@@ -41,12 +41,12 @@ nos GRANTs.
 Pergunte qual cliente ele usa.
 
 - Claude Code: rode
-  `claude mcp add --scope user pg-readonly -- uv run --directory <CAMINHO_ABSOLUTO> pg-readonly-mcp`
+  `claude mcp add --scope user db-mcp -- uv run --directory <CAMINHO_ABSOLUTO> db-mcp`
   (substitua `<CAMINHO_ABSOLUTO>` pela raiz do projeto). Confirme com `claude mcp list`.
 - Claude Desktop: entregue o JSON pra ele colar em
   `%APPDATA%\Claude\claude_desktop_config.json` (Windows) ou
   `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), com `command: "uv"`
-  e `args: ["run", "--directory", "<CAMINHO_ABSOLUTO>", "pg-readonly-mcp"]`. Lembre de escapar
+  e `args: ["run", "--directory", "<CAMINHO_ABSOLUTO>", "db-mcp"]`. Lembre de escapar
   `\\` no Windows e reiniciar o app.
 
 Como o servidor lê o `.env` da pasta do projeto, não coloque segredos na config do cliente.

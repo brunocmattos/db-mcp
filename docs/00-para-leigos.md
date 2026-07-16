@@ -1,4 +1,4 @@
-# pg-readonly-mcp explicado do zero
+# db-mcp explicado do zero
 
 > Um guia para quem **não** é da área. Nada aqui pressupõe que você saiba programar ou
 > entenda de banco de dados. Cada termo técnico é explicado na primeira vez que aparece,
@@ -44,7 +44,7 @@ Quem fala MCP pode oferecer três tipos de coisa. Pense em três tijolos de cons
 - **Recursos** (*resources*): dados que a IA lê, mais parados, como um documento ou um arquivo disponível para consulta. É o tijolo do "olhar".
 - **Prompts** (*prompts*): atalhos de instrução prontos, como um botão de "faça deste jeito" que já vem com o texto do pedido montado. É o tijolo do "receita pronta".
 
-Um sistema não precisa oferecer os três. **Este projeto, o pg-readonly-mcp, oferece só ferramentas** — seis delas, cada uma uma ação sobre o banco de dados: `listar_schemas`, `listar_tabelas`, `listar_views`, `descrever_tabela`, `amostra` e `consultar`. No código elas aparecem marcadas com `@mcp.tool`, que é justamente o rótulo de "isto aqui é uma ferramenta". Nada de recursos, nada de prompts.
+Um sistema não precisa oferecer os três. **Este projeto, o db-mcp, oferece só ferramentas** — seis delas, cada uma uma ação sobre o banco de dados: `listar_schemas`, `listar_tabelas`, `listar_views`, `descrever_tabela`, `amostra` e `consultar`. No código elas aparecem marcadas com `@mcp.tool`, que é justamente o rótulo de "isto aqui é uma ferramenta". Nada de recursos, nada de prompts.
 
 ### Cliente e servidor: quem pede e quem serve
 
@@ -58,9 +58,9 @@ Vale guardar a imagem do **garçom** para o resto da explicação: o servidor MC
 
 ## O que é ESTE MCP, por que usar e onde
 
-Em uma frase: o **pg-readonly-mcp** é um porteiro que deixa uma IA **olhar** as fichas de um banco de dados, mas nunca rasurar, mudar ou arrancar nenhuma.
+Em uma frase: o **db-mcp** é um porteiro que deixa uma IA **olhar** as fichas de um banco de dados, mas nunca rasurar, mudar ou arrancar nenhuma.
 
-Vamos por partes. Um **banco de dados** é como um almoxarifado gigante de fichas muito bem organizadas: fichas de clientes, de pedidos, de produtos, cada tipo em sua própria gaveta. O **PostgreSQL** é uma marca específica desse tipo de almoxarifado — uma das mais usadas no mundo. O pg-readonly-mcp é um programa que fica entre a IA e esse almoxarifado. Ele traduz os pedidos da IA para a língua do banco e devolve as respostas — mas com uma regra inegociável no meio do caminho: **só leitura**. A IA pode pedir "me mostra as fichas de clientes de São Paulo" e receber a resposta. Não pode pedir "apaga essas fichas" nem "troca o nome em todas elas". Esse pedido nem chega a ser executado.
+Vamos por partes. Um **banco de dados** é como um almoxarifado gigante de fichas muito bem organizadas: fichas de clientes, de pedidos, de produtos, cada tipo em sua própria gaveta. O **PostgreSQL** é uma marca específica desse tipo de almoxarifado — uma das mais usadas no mundo. O db-mcp é um programa que fica entre a IA e esse almoxarifado. Ele traduz os pedidos da IA para a língua do banco e devolve as respostas — mas com uma regra inegociável no meio do caminho: **só leitura**. A IA pode pedir "me mostra as fichas de clientes de São Paulo" e receber a resposta. Não pode pedir "apaga essas fichas" nem "troca o nome em todas elas". Esse pedido nem chega a ser executado.
 
 ### O problema que ele resolve
 
@@ -76,7 +76,7 @@ Nenhum desses precisa de má intenção. Basta a IA errar uma vez.
 
 ### A filosofia: assuma que a IA vai errar
 
-A saída preguiçosa seria pedir com jeitinho para a IA se comportar e torcer. O pg-readonly-mcp faz o contrário. Ele **parte do princípio de que a IA vai errar** e deixa o caminho seguro de qualquer jeito.
+A saída preguiçosa seria pedir com jeitinho para a IA se comportar e torcer. O db-mcp faz o contrário. Ele **parte do princípio de que a IA vai errar** e deixa o caminho seguro de qualquer jeito.
 
 Se a IA tentar escrever, o próprio banco recusa. Se pedir uma gaveta que não devia, a aplicação barra. Se pedir fichas demais, existe um teto que corta. A segurança não depende de a IA ser bem-comportada — depende de barreiras que ficam de pé mesmo quando ela não é.
 
@@ -95,7 +95,7 @@ Em qualquer situação em que alguém — pessoa ou automação — precisa **co
 
 O fio que costura todos os casos é o mesmo: **sempre leitura**. No momento em que a tarefa for escrever, alterar ou apagar algo, esta ferramenta não é a certa — e essa recusa é justamente o ponto dela.
 
-Uma observação honesta de escopo: o pg-readonly-mcp fala **só** com PostgreSQL. Ele não conversa com MySQL nem com SQL Server. Em compensação, funciona com **qualquer** almoxarifado PostgreSQL — você aponta a ferramenta para o seu banco na configuração, e o código não conhece nenhum banco específico de antemão.
+Uma observação honesta de escopo: o db-mcp fala **só** com PostgreSQL. Ele não conversa com MySQL nem com SQL Server. Em compensação, funciona com **qualquer** almoxarifado PostgreSQL — você aponta a ferramenta para o seu banco na configuração, e o código não conhece nenhum banco específico de antemão.
 
 ## Como usar (e é fácil de configurar e de entender?)
 
@@ -113,8 +113,8 @@ O resumo cabe em quatro linhas:
 ```bash
 uv sync                       # instala tudo
 cp .env.example .env          # crie seu .env a partir do modelo
-uv run pg-readonly-mcp doctor # confere se está tudo certo
-uv run pg-readonly-mcp        # sobe o servidor
+uv run db-mcp doctor # confere se está tudo certo
+uv run db-mcp        # sobe o servidor
 ```
 
 Traduzindo cada passo:
@@ -133,7 +133,7 @@ Se você só quer **ver a coisa funcionando** antes de mexer no seu banco de ver
 ```bash
 docker compose up -d                            # sobe o banco de demonstração
 uv sync                                          # instala o MCP
-uv run pg-readonly-mcp --env .env.demo doctor    # confere tudo
+uv run db-mcp --env .env.demo doctor    # confere tudo
 ```
 
 O `doctor` responde com os seis ✅ verdes. E dá pra ver o segurança na porta trabalhando: uma consulta de leitura volta com dados de clientes de mentira; uma tentativa de escrita (`UPDATE`) é barrada com a mensagem "apenas comandos SELECT são permitidos". Quando cansar, `docker compose down -v` apaga tudo sem deixar rastro. É a forma mais rápida de entender o projeto de olho, sem risco.
@@ -142,9 +142,9 @@ O `doctor` responde com os seis ✅ verdes. E dá pra ver o segurança na porta 
 
 Aqui está o diferencial. Você não precisa entender comando nenhum. Você abre a pasta do projeto no **Claude Code** e pede, em português comum:
 
-> "Instala o pg-readonly-mcp apontando pro meu banco."
+> "Instala o db-mcp apontando pro meu banco."
 
-Aí entra uma **skill** — uma receita passo a passo que o Claude segue sozinho (a `setup-pg-readonly-mcp`). Seguindo o `SETUP.md`, ela conduz tudo:
+Aí entra uma **skill** — uma receita passo a passo que o Claude segue sozinho (a `setup-db-mcp`). Seguindo o `SETUP.md`, ela conduz tudo:
 
 1. **Pergunta os dados** do seu banco num bloco só (host, porta, nome, usuário, senha).
 2. **Ajuda a criar o usuário somente-leitura**: se você ainda não tem, ela te entrega o comando de banco já preenchido com os seus valores, pra você (ou seu administrador) rodar. Ela deixa explícito que esse usuário só ganha permissão de olhar, nunca de escrever.
@@ -174,7 +174,7 @@ Na prática, isso quer dizer que se você jogar este repositório numa IA e perg
 
 ## Como foi montado por dentro e por que assim
 
-Pense no programa como uma casa. Tem o miolo da casa, onde moram as regras e a porta dos fundos que dá pro almoxarifado de fichas (o banco de dados). E tem a fachada, por onde o garçom entra e sai levando os pedidos. No pg-readonly-mcp esses dois pedaços são separados de propósito.
+Pense no programa como uma casa. Tem o miolo da casa, onde moram as regras e a porta dos fundos que dá pro almoxarifado de fichas (o banco de dados). E tem a fachada, por onde o garçom entra e sai levando os pedidos. No db-mcp esses dois pedaços são separados de propósito.
 
 ### Núcleo por dentro, casca por fora
 
@@ -327,7 +327,7 @@ O mais famoso era o **servidor "postgres" de referência**, feito pela própria 
 
 O outro popular é o **Postgres MCP Pro** (do projeto crystaldba/postgres-mcp). Esse é bem mais parrudo e vai para o lado oposto: ele **escreve** no banco (por padrão), analisa desempenho, sugere melhorias e mostra o "plano de execução" das consultas. É um canivete suíço para quem administra e otimiza banco.
 
-O pg-readonly-mcp escolheu deliberadamente ser o contrário de um canivete suíço: uma ferramenta só, muito bem afiada.
+O db-mcp escolheu deliberadamente ser o contrário de um canivete suíço: uma ferramenta só, muito bem afiada.
 
 ### As vantagens deste projeto
 
@@ -394,7 +394,7 @@ Neste projeto, o cardápio tem exatamente seis pratos:
 - `amostra` — traz as primeiras linhas de uma tabela.
 - `consultar` — deixa a IA escrever uma pergunta de busca própria.
 
-Repare numa decisão de projeto: as quatro primeiras só olham a "planta" do almoxarifado. As duas últimas tocam nos dados de verdade e, por isso, passam por mais conferência. Isso está escrito no código (`src/pg_readonly_mcp/server.py`): as de introspecção chamam a busca com `aplicar_allowlist=False`, e a `consultar` até pode ser desligada por completo com uma chave de configuração (`ALLOW_FREEFORM_SQL=false`).
+Repare numa decisão de projeto: as quatro primeiras só olham a "planta" do almoxarifado. As duas últimas tocam nos dados de verdade e, por isso, passam por mais conferência. Isso está escrito no código (`src/db_mcp/server.py`): as de introspecção chamam a busca com `aplicar_allowlist=False`, e a `consultar` até pode ser desligada por completo com uma chave de configuração (`ALLOW_FREEFORM_SQL=false`).
 
 Definir o cardápio é a parte mais importante. Tudo que você **não** colocar aqui, a IA não consegue fazer. Ponto.
 
@@ -442,7 +442,7 @@ O `mcp.run()` da última linha liga o garçom. Ele precisa de um **transporte** 
 
 Depois você registra esse MCP no **cliente** — o programa da IA que você usa (por exemplo, o Claude). A partir daí, quando a IA precisa somar, ela pede pro garçom `somar`, e pronto.
 
-Este projeto oferece dois transportes (visto no `src/pg_readonly_mcp/cli.py`): **stdio** pra você mexer na sua máquina, e **HTTP** (pela rede, como um serviço rodando num servidor) pra produção. E há uma trava honesta no código: no modo HTTP, ele **se recusa a ligar** sem uma senha de acesso (`AUTH_TOKEN`) configurada — porque um garçom exposto na rede sem senha seria um convite aberto.
+Este projeto oferece dois transportes (visto no `src/db_mcp/cli.py`): **stdio** pra você mexer na sua máquina, e **HTTP** (pela rede, como um serviço rodando num servidor) pra produção. E há uma trava honesta no código: no modo HTTP, ele **se recusa a ligar** sem uma senha de acesso (`AUTH_TOKEN`) configurada — porque um garçom exposto na rede sem senha seria um convite aberto.
 
 ### O que dá pra ter dentro de um MCP
 
@@ -494,15 +494,15 @@ A resposta curta: **sim, é viável, e o projeto foi montado de um jeito que aju
 
 Quatro pedaços do código só sabem falar "postgresês".
 
-**1. O driver.** Driver é a peça que efetivamente conversa com o banco pela rede — o telefone que liga o nosso código no almoxarifado. O projeto usa um driver chamado `psycopg`, que só liga em PostgreSQL. No arquivo `src/pg_readonly_mcp/db.py` isso está logo no topo: `import psycopg`. Para MySQL ou SQL Server, esse telefone não disca.
+**1. O driver.** Driver é a peça que efetivamente conversa com o banco pela rede — o telefone que liga o nosso código no almoxarifado. O projeto usa um driver chamado `psycopg`, que só liga em PostgreSQL. No arquivo `src/db_mcp/db.py` isso está logo no topo: `import psycopg`. Para MySQL ou SQL Server, esse telefone não disca.
 
-**2. O sotaque que o segurança entende.** O validador de SQL é o segurança na porta que revista cada pedido antes de deixar entrar. Ele usa uma biblioteca chamada `sqlglot`, que lê o pedido em SQL e entende sua estrutura. O detalhe: hoje ele lê no sotaque Postgres. Em `src/pg_readonly_mcp/guardrails/sql.py` está escrito, na prática, "interprete isto como Postgres" (`read="postgres"`). Se você mandar SQL no sotaque do SQL Server, o segurança pode não reconhecer o pedido direito.
+**2. O sotaque que o segurança entende.** O validador de SQL é o segurança na porta que revista cada pedido antes de deixar entrar. Ele usa uma biblioteca chamada `sqlglot`, que lê o pedido em SQL e entende sua estrutura. O detalhe: hoje ele lê no sotaque Postgres. Em `src/db_mcp/guardrails/sql.py` está escrito, na prática, "interprete isto como Postgres" (`read="postgres"`). Se você mandar SQL no sotaque do SQL Server, o segurança pode não reconhecer o pedido direito.
 
-**3. O jeito de olhar o catálogo.** Quando as ferramentas listam schemas, tabelas e colunas, elas consultam o "índice geral" do almoxarifado. No PostgreSQL o código faz isso pelo `information_schema` — e em `src/pg_readonly_mcp/server.py` as consultas de introspecção batem exatamente aí. Boa notícia parcial: o `information_schema` é um padrão do SQL que o MySQL e o SQL Server também têm, então essas perguntas viajam melhor que o resto do código. A pegadinha é que os detalhes mudam de banco pra banco: o código, por exemplo, filtra os schemas de sistema do Postgres (`NOT LIKE 'pg_%'`), e a própria allowlist trata o `pg_catalog` — o catálogo de sistema, um nome que só existe no Postgres — como sempre-liberado (em `src/pg_readonly_mcp/guardrails/policy.py`). Cada engine também descreve tipos e schemas do seu jeito. Ou seja: não é reescrever do zero, mas cada consulta precisa de revisão e teste por banco.
+**3. O jeito de olhar o catálogo.** Quando as ferramentas listam schemas, tabelas e colunas, elas consultam o "índice geral" do almoxarifado. No PostgreSQL o código faz isso pelo `information_schema` — e em `src/db_mcp/server.py` as consultas de introspecção batem exatamente aí. Boa notícia parcial: o `information_schema` é um padrão do SQL que o MySQL e o SQL Server também têm, então essas perguntas viajam melhor que o resto do código. A pegadinha é que os detalhes mudam de banco pra banco: o código, por exemplo, filtra os schemas de sistema do Postgres (`NOT LIKE 'pg_%'`), e a própria allowlist trata o `pg_catalog` — o catálogo de sistema, um nome que só existe no Postgres — como sempre-liberado (em `src/db_mcp/guardrails/policy.py`). Cada engine também descreve tipos e schemas do seu jeito. Ou seja: não é reescrever do zero, mas cada consulta precisa de revisão e teste por banco.
 
 **4. O jeito de trancar em "somente-leitura".** "Somente-leitura" é a promessa central: pode olhar as fichas, não pode rasurar nem arrancar nenhuma. No PostgreSQL existe um comando elegante que declara uma transação inteira como "só leitura" — e o código usa exatamente isso (`conn.read_only = True`, no `db.py`). É um cadeado que o próprio banco oferece de fábrica. O MySQL também tem o seu (`START TRANSACTION READ ONLY`); o SQL Server é o que não oferece um botão tão limpo assim. Em ambos, a garantia acaba dependendo mais de como o usuário do banco foi criado — mas isso, veremos, vale para os três.
 
-Some a isso um detalhe: até os nomes na configuração são "postgres-centrados". No `src/pg_readonly_mcp/config.py` os campos se chamam `pg_host`, `pg_port`, `pg_dbname`, `pg_user`. Tudo com o carimbo `pg`.
+Some a isso um detalhe: até os nomes na configuração são "postgres-centrados". No `src/db_mcp/config.py` os campos se chamam `pg_host`, `pg_port`, `pg_dbname`, `pg_user`. Tudo com o carimbo `pg`.
 
 ### O que joga a favor
 
@@ -556,7 +556,7 @@ Mas não se iluda com o tamanho. Não é virar uma chave. É desenhar a "tomada 
 
 ## Em uma frase, para fechar
 
-O pg-readonly-mcp é um porteiro cuidadoso que deixa uma inteligência artificial **olhar** os
+O db-mcp é um porteiro cuidadoso que deixa uma inteligência artificial **olhar** os
 dados de um banco PostgreSQL — nunca mexer neles. Ele foi construído partindo do princípio de
 que a IA vai errar, e mesmo assim mantém o caminho seguro: o próprio banco recusa qualquer
 escrita, a rede só deixa entrar quem é conhecido, e a aplicação revista cada pedido antes de

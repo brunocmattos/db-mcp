@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from pg_readonly_mcp.config import Settings
+from db_mcp.config import Settings
 
 
 def test_env_tem_prioridade_sobre_yaml(tmp_path, monkeypatch):

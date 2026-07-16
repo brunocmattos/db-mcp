@@ -2,8 +2,8 @@ import sys
 
 import pytest
 
-import pg_readonly_mcp.cli as cli
-from pg_readonly_mcp.cli import montar
+import db_mcp.cli as cli
+from db_mcp.cli import montar
 
 
 def test_montar_retorna_servidor(monkeypatch):
@@ -11,7 +11,7 @@ def test_montar_retorna_servidor(monkeypatch):
         monkeypatch.setenv(k, v)
     # conectar=False não abre conexão com o banco
     mcp = montar(env_file=None, yaml_file="/nao/existe.yaml", conectar=False)
-    assert mcp.name == "pg-readonly-mcp"
+    assert mcp.name == "db-mcp"
 
 
 def test_doctor_subcomando_propaga_exit_code(monkeypatch):
@@ -21,8 +21,8 @@ def test_doctor_subcomando_propaga_exit_code(monkeypatch):
         chamado["args"] = (env_file, yaml_file, modo_cor)
         return 3
 
-    monkeypatch.setattr("pg_readonly_mcp.doctor.executar_doctor", fake_doctor)
-    monkeypatch.setattr(sys, "argv", ["pg-readonly-mcp", "doctor"])
+    monkeypatch.setattr("db_mcp.doctor.executar_doctor", fake_doctor)
+    monkeypatch.setattr(sys, "argv", ["db-mcp", "doctor"])
     with pytest.raises(SystemExit) as exc:
         cli.main()
     assert exc.value.code == 3
@@ -43,7 +43,7 @@ def test_http_sem_auth_token_recusa_subir(monkeypatch):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["pg-readonly-mcp", "--env", "naoexiste.env", "--config", "naoexiste.yaml", "run"],
+        ["db-mcp", "--env", "naoexiste.env", "--config", "naoexiste.yaml", "run"],
     )
     with pytest.raises(SystemExit) as exc:
         cli.main()

@@ -19,7 +19,7 @@ class Database:
             user=s.pg_user,
             password=s.pg_password,
             sslmode=s.pg_sslmode,
-            application_name="pg-readonly-mcp",
+            application_name="db-mcp",
             options=f"-c statement_timeout={s.statement_timeout_ms} "
             f"-c idle_in_transaction_session_timeout=10000",
         )

@@ -1,7 +1,7 @@
 import pytest
 
-from pg_readonly_mcp.errors import ForaDaAllowlist
-from pg_readonly_mcp.guardrails.policy import (
+from db_mcp.errors import ForaDaAllowlist
+from db_mcp.guardrails.policy import (
     checar_allowlist,
     injetar_limit,
     tabelas_referenciadas,

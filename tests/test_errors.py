@@ -1,4 +1,4 @@
-from pg_readonly_mcp.errors import (
+from db_mcp.errors import (
     ConsultaTimeout,
     ErroBanco,
     ForaDaAllowlist,

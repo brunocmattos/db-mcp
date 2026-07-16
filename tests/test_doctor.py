@@ -2,7 +2,7 @@ import socket
 
 import pytest
 
-from pg_readonly_mcp.doctor import (
+from db_mcp.doctor import (
     Contexto,
     PularChecagem,
     Resultado,
