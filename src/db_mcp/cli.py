@@ -23,6 +23,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="db-mcp")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--env", default=".env")
+    parser.add_argument(
+        "--dialect",
+        choices=["postgres", "mysql", "sqlserver"],
+        default=None,
+        help="sobrescreve o dialeto da config",
+    )
     sub = parser.add_subparsers(dest="cmd")
 
     p_doc = sub.add_parser("doctor", help="checagens de saúde/preflight")
@@ -35,10 +41,15 @@ def main() -> None:
     if args.cmd == "doctor":
         from .doctor import executar_doctor
 
+        # FASE 1: --dialect não chega aqui (o doctor carrega o Settings por conta
+        # própria). Inofensivo enquanto `postgres` é o único dialeto que resolve;
+        # ao adicionar o MySQL, propagar o override ou a flag passa a mentir.
         raise SystemExit(executar_doctor(args.env, args.config, args.color))
 
     # default (sem subcomando) e "run": sobe o servidor (comportamento da Fase 1)
     s = Settings.load(env_file=args.env, yaml_file=args.config)
+    if args.dialect:
+        s.dialeto = args.dialect
     configurar_logging(s.log_level)
     # Fail-closed: HTTP sem token ficaria sem autenticação. Exige AUTH_TOKEN.
     if s.transport == "http" and not s.auth_token:

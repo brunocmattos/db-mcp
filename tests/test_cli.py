@@ -29,6 +29,36 @@ def test_doctor_subcomando_propaga_exit_code(monkeypatch):
     assert chamado["args"] == (".env", "config.yaml", "auto")
 
 
+def test_flag_dialect_sobrescreve_a_config(monkeypatch):
+    for k in ("PG_HOST", "PG_DBNAME", "PG_PASSWORD"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.delenv("DIALETO", raising=False)
+    visto = {}
+
+    def _captura(s, conectar=True):
+        visto["dialeto"] = s.dialeto
+        raise SystemExit(0)  # não sobe servidor de verdade no teste
+
+    monkeypatch.setattr(cli, "construir_servidor", _captura)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "db-mcp",
+            "--env",
+            "naoexiste.env",
+            "--config",
+            "naoexiste.yaml",
+            "--dialect",
+            "mysql",
+            "run",
+        ],
+    )
+    with pytest.raises(SystemExit):
+        cli.main()
+    assert visto["dialeto"] == "mysql"
+
+
 def test_http_sem_auth_token_recusa_subir(monkeypatch):
     # fail-closed: TRANSPORT=http sem AUTH_TOKEN nao pode subir (ficaria sem auth).
     for k in ("PG_HOST", "PG_DBNAME", "PG_PASSWORD"):
