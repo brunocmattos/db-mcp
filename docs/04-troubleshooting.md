@@ -27,8 +27,8 @@ Requer Python 3.11+. O dev trabalha no 3.12 (fixado no `.python-version`) e o CI
 
 - Claude Desktop: feche e reabra por completo, ele só lê a config na inicialização. Um JSON
   malformado desativa todos os servidores de uma vez, então valide as vírgulas e chaves. Logs em
-  `%APPDATA%\Claude\logs\mcp-server-pg-readonly.log` (Windows) ou `~/Library/Logs/Claude/` (macOS).
-- Claude Code: `claude mcp list` e `claude mcp get pg-readonly`. Servidores de escopo `project`
+  `%APPDATA%\Claude\logs\mcp-server-db-mcp.log` (Windows) ou `~/Library/Logs/Claude/` (macOS).
+- Claude Code: `claude mcp list` e `claude mcp get db-mcp`. Servidores de escopo `project`
   (`.mcp.json`) pedem aprovação uma vez; resete com `claude mcp reset-project-choices`.
 - `command not found: uv`: o cliente não herdou o PATH. Use o caminho absoluto do `uv` no
   `command` (descubra com `where uv` ou `which uv`).
