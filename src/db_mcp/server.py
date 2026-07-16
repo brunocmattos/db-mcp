@@ -11,10 +11,11 @@ from fastmcp.server.dependencies import get_access_token
 
 from .config import Settings
 from .db import Database
+from .dialetos.base import Perfil
 from .errors import LimiteDeTaxa, McpDbError, ResultadoGrandeDemais, SqlInvalido
 from .guardrails.policy import checar_allowlist, injetar_limit
 from .guardrails.ratelimit import RateLimiter
-from .guardrails.sql import validar_somente_leitura
+from .guardrails.sql import validar
 from .observability import Auditoria
 
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
@@ -55,6 +56,7 @@ class Nucleo:
     def __init__(self, s: Settings, db: Database | None = None) -> None:
         self.s = s
         self.db = db if db is not None else Database(s)
+        self.dialeto = self.db.dialeto
         self.rl = RateLimiter(por_minuto=s.rate_limit_per_min)
         self.aud = Auditoria(s.audit_log_path)
 
@@ -65,7 +67,7 @@ class Nucleo:
         try:
             if not self.rl.permitir(cliente):
                 raise LimiteDeTaxa("muitas consultas — tente novamente em instantes")
-            validar_somente_leitura(sql)  # cadeado nº 3 (a)
+            validar(sql, self.dialeto, Perfil.SOMENTE_LEITURA)  # cadeado nº 3 (a)
             if aplicar_allowlist:
                 checar_allowlist(sql, self.s.allowlist)  # cadeado nº 3 (b)
             # Pede uma linha a mais que o teto: se ela vier, sabemos que houve corte

@@ -3,6 +3,7 @@ import json
 import pytest
 
 from db_mcp.config import Settings
+from db_mcp.dialetos import obter_dialeto
 from db_mcp.errors import SomenteLeitura, SqlInvalido
 from db_mcp.server import (
     Nucleo,
@@ -16,6 +17,7 @@ from db_mcp.server import (
 class FakeDB:
     def __init__(self):
         self.ultimo_sql = None
+        self.dialeto = obter_dialeto("postgres")
 
     def executar(self, sql, max_rows):
         self.ultimo_sql = sql
@@ -66,6 +68,8 @@ def test_erro_do_banco_e_auditado(monkeypatch, tmp_path):
     from db_mcp.errors import ErroBanco
 
     class DBQuebrado:
+        dialeto = obter_dialeto("postgres")
+
         def executar(self, sql, max_rows):
             raise ErroBanco("erro do banco: relation inexistente")
 
@@ -81,6 +85,8 @@ def test_resultado_grande_demais_e_auditado(monkeypatch, tmp_path):
     from db_mcp.errors import ResultadoGrandeDemais
 
     class DBGrande:
+        dialeto = obter_dialeto("postgres")
+
         def executar(self, sql, max_rows):
             return [{"x": "A" * 1000}], False
 
@@ -110,6 +116,8 @@ def test_limite_de_taxa_via_nucleo_e_auditado(monkeypatch, tmp_path):
 def test_truncado_pelo_caminho_completo(monkeypatch, tmp_path):
     # FakeDB devolve truncado=True; o Nucleo tem que propagar isso na resposta.
     class DBTruncado:
+        dialeto = obter_dialeto("postgres")
+
         def executar(self, sql, max_rows):
             return [{"n": 1}], True
 

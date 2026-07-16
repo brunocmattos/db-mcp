@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sqlglot
 from sqlglot import exp
 from sqlglot.errors import ParseError
 
 from ..errors import SomenteLeitura, SqlInvalido
+
+if TYPE_CHECKING:
+    from ..dialetos import Dialeto
+    from ..dialetos.base import Perfil
 
 # Nomes de classe (nós do sqlglot) que representam escrita/DDL/utilitários — proibidos.
 TAGS_PROIBIDAS = {
@@ -30,69 +34,6 @@ TAGS_PROIBIDAS = {
     "Lock",  # SELECT ... FOR UPDATE/SHARE adquire lock de escrita
 }
 
-# Funções perigosas (efeito colateral, arquivo, rede, DoS, ou que executam SQL/tabela vindos
-# de string e escapam do validador e da allowlist) — bloqueadas por nome.
-FUNCS_PROIBIDAS = {
-    # arquivo / objeto grande / rede
-    "pg_read_file",
-    "pg_read_binary_file",
-    "pg_ls_dir",
-    "pg_stat_file",
-    "pg_read_server_files",
-    "lo_import",
-    "lo_export",
-    "lo_get",
-    "lo_open",
-    "loread",
-    "dblink",
-    "dblink_exec",
-    # escreve WAL durável mesmo em read-only (enche disco / injeta na decodificação lógica)
-    "pg_logical_emit_message",
-    # outros efeitos colaterais que o read-only do banco não barra
-    "pg_notify",
-    "pg_export_snapshot",
-    "txid_current",
-    "pg_current_xact_id",
-    # DoS / controle de sessão alheia
-    "pg_sleep",
-    "pg_sleep_for",
-    "pg_sleep_until",
-    "pg_terminate_backend",
-    "pg_cancel_backend",
-    # efeito colateral em sequence
-    "nextval",
-    "setval",
-    # muda o estado da sessão (GUC): statement_timeout, search_path, etc.
-    "set_config",
-    # advisory locks — efeito colateral que persiste na conexão do pool
-    "pg_advisory_lock",
-    "pg_advisory_lock_shared",
-    "pg_advisory_xact_lock",
-    "pg_advisory_xact_lock_shared",
-    "pg_try_advisory_lock",
-    "pg_try_advisory_lock_shared",
-    "pg_try_advisory_xact_lock",
-    "pg_try_advisory_xact_lock_shared",
-    "pg_advisory_unlock",
-    "pg_advisory_unlock_shared",
-    "pg_advisory_unlock_all",
-    # export XML: recebem tabela/consulta como string e escapam da allowlist
-    "query_to_xml",
-    "query_to_xmlschema",
-    "query_to_xml_and_xmlschema",
-    "table_to_xml",
-    "table_to_xmlschema",
-    "table_to_xml_and_xmlschema",
-    "cursor_to_xml",
-    "cursor_to_xmlschema",
-    "schema_to_xml",
-    "schema_to_xmlschema",
-    "schema_to_xml_and_xmlschema",
-    "database_to_xml",
-    "database_to_xmlschema",
-    "database_to_xml_and_xmlschema",
-}
-
 
 def _iter_nos(raiz: exp.Expression) -> Iterator[Any]:
     """Itera todos os nós da árvore (tolerante a diferenças de versão do sqlglot)."""
@@ -100,12 +41,18 @@ def _iter_nos(raiz: exp.Expression) -> Iterator[Any]:
         yield item[0] if isinstance(item, tuple) else item
 
 
-def validar_somente_leitura(sql: str) -> None:
-    """Levanta SqlInvalido/SomenteLeitura se `sql` não for um único SELECT seguro."""
+def validar(sql: str, dialeto: Dialeto, perfil: Perfil) -> None:
+    """Levanta SqlInvalido/SomenteLeitura se `sql` não for um único SELECT seguro.
+
+    `perfil` só tem um valor nesta fase (SOMENTE_LEITURA) — a escrita tem spec
+    própria. O parâmetro existe pra costura nascer no lugar certo.
+    """
     try:
         arvores = [
             a
-            for a in sqlglot.parse(sql, read="postgres", error_level=sqlglot.ErrorLevel.RAISE)
+            for a in sqlglot.parse(
+                sql, read=dialeto.sqlglot_dialeto, error_level=sqlglot.ErrorLevel.RAISE
+            )
             if a is not None
         ]
     except ParseError as e:
@@ -127,5 +74,5 @@ def validar_somente_leitura(sql: str) -> None:
             # node.name devolve o nome nu mesmo com aspas (`"pg_read_file"`) ou schema
             # (`pg_catalog.pg_read_file`) — str(node.this) traria as aspas e escaparia a lista.
             fn = node.name.lower()
-            if fn in FUNCS_PROIBIDAS:
+            if fn in dialeto.funcs_proibidas:
                 raise SomenteLeitura(f"função não permitida: {fn}")
