@@ -76,11 +76,11 @@ segredo na config do cliente; basta apontar pro comando.
 
 ```bash
 # escopo "user" = disponível em todos os seus projetos
-claude mcp add --scope user pg-readonly \
+claude mcp add --scope user db-mcp \
   -- uv run --directory /CAMINHO/ABSOLUTO/db-mcp db-mcp
 ```
 
-Confira com `claude mcp list` e `claude mcp get pg-readonly`. O `--directory` é
+Confira com `claude mcp list` e `claude mcp get db-mcp`. O `--directory` é
 obrigatório: o cliente sobe o processo de um diretório qualquer, e é ele que faz o
 `uv` achar o projeto (e o `.env`).
 
@@ -91,7 +91,7 @@ Para compartilhar com o time via git, sem segredos (cada um define suas vars de 
 ```json
 {
   "mcpServers": {
-    "pg-readonly": {
+    "db-mcp": {
       "type": "stdio",
       "command": "uv",
       "args": ["run", "--directory", "${CLAUDE_PROJECT_DIR:-.}", "db-mcp"]
@@ -110,7 +110,7 @@ Edite o arquivo de config (Settings → Developer → Edit Config, ou direto):
 ```json
 {
   "mcpServers": {
-    "pg-readonly": {
+    "db-mcp": {
       "command": "uv",
       "args": ["run", "--directory", "C:\\CAMINHO\\ABSOLUTO\\db-mcp", "db-mcp"]
     }
