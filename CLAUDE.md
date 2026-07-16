@@ -14,7 +14,7 @@ tags: [mcp, banco-de-dados, open-source, postgres]
 
 ## Estado atual
 **Fase 0 em andamento — refatorar para multi-dialeto, ainda só com PostgreSQL.**
-Branch `refactor/fase-0-multi-dialeto`, **5 commits, nada pushado**. Tasks 1-5 feitas, **6-12 faltam**.
+Branch `refactor/fase-0-multi-dialeto` (**6 commits, pushada**). Tasks 1-5 feitas, **6-12 faltam**.
 
 - 📄 **[Spec do design multi-dialeto](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)**
   (aprovado) e **[plano da Fase 0 (12 tasks)](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md)**.
@@ -27,9 +27,10 @@ Branch `refactor/fase-0-multi-dialeto`, **5 commits, nada pushado**. Tasks 1-5 f
   defeito, o outro bateu no limite de sessão da API). Está de pé por aprovação do Bruno + verificação
   manual (110/9 idêntico à base, zero ocorrência do nome antigo, `docs/superpowers/` intacto).
   Revisão retroativa está no Backlog.
-- ❓ **Decisão aberta:** `docs/superpowers/` (spec + plano) vai pro repo **público** ou entra no
-  `.gitignore`? O `.gitignore` já mantém `docs/plans/` e `docs/HANDOFF.md` fora, mas não cobre
-  `docs/superpowers/`. Nada pushado ainda — dá tempo de decidir.
+- 📖 **Spec, plano, `CLAUDE.md` e `worklog.md` são públicos, por decisão (2026-07-16).** O repo é o
+  único público do portfólio, e a alternativa (git-ignorar os docs internos) compraria arrumação
+  estética pagando com a falha que mais dói: trabalho que existe num disco só. Nada aqui tem segredo
+  — os segredos moram em `.env`/`config.yaml`/`deployments/`, todos git-ignored.
 
 **Próxima ação:** **Task 6** — `guardrails/sql.py` vira `validar(sql, dialeto, perfil)`; a lista de
 funções proibidas sai do módulo e passa a vir do dialeto, e `test_sql.py` fica parametrizado por
@@ -152,7 +153,8 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
   rejeitava `2fa_tokens`, aprovava `Order`; parâmetro mata a classe de injeção em vez de filtrá-la).
 - [ ] **Fase 0 · T10-T12:** doctor delega o probe de escrita → teste de **fiação** e2e (os unitários
   provam que o validador está correto; falta provar que está **plugado**) → docs + verificação final.
-- [ ] **Decidir: `docs/superpowers/` vai pro repo público ou pro `.gitignore`?** Bloqueia o 1º push.
+- [x] **Decidido (2026-07-16): os docs internos são públicos** — spec, plano, `CLAUDE.md` e
+  `worklog.md` versionados. Backup off-machine vale mais que arrumação estética.
 - [ ] **Revisão retroativa da Task 2** (o rename) — a formal nunca rodou.
 - [ ] **Fase 1 (MySQL)** e **Fase 2 (SQL Server)** — cada uma com plano próprio, depois da 0 verde.
 - [ ] **Escrita configurável** — spec próprio, quando chegar a hora. Ver o princípio acima.

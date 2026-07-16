@@ -32,9 +32,11 @@ executar a Fase 0 (refatorar **sem** adicionar dialeto novo).
   posições SQL diferentes (literal → query parameter; identificador → quoting via sqlglot).
 
 **Riscos / quem afeta:** ⚠️ **Nada em produção** — o projeto não tem deployment; o único banco tocado
-foi o container de demo. ⚠️ **Nada pushado** (5 commits na branch `refactor/fase-0-multi-dialeto`) —
-**o GitHub é o único backup off-machine e ele ainda não tem nada disto.** ❓ **Bloqueia o 1º push:**
-decidir se `docs/superpowers/` vai pro repo **público**. ⚠️ **A Task 2 (rename) não passou pela
+foi o container de demo. ✅ **Pushado** (`main` + `refactor/fase-0-multi-dialeto`) — o trabalho deixou
+de existir num disco só. 📖 **Decidido: os docs internos são públicos** (spec, plano, `CLAUDE.md`,
+`worklog.md`). O repo é o único público do portfólio; git-ignorá-los compraria arrumação estética
+pagando com a falha que a auditoria aponta há 6 rodadas — trabalho sem backup off-machine. Segredo
+nenhum entra aqui: `.env`/`config.yaml`/`deployments/` seguem git-ignored. ⚠️ **A Task 2 (rename) não passou pela
 revisão formal** — os dois revisores falharam (defeito + limite de sessão da API); está de pé por
 aprovação do Bruno + verificação manual. 📌 **Registrado como dívida:** a flag `--dialect` não alcança
 o `doctor`; inofensivo hoje, mente em silêncio a partir da Fase 1 (marcador `# FASE 1:` no `cli.py`).
