@@ -1,7 +1,15 @@
 import pytest
 
+from db_mcp.dialetos import obter_dialeto
+from db_mcp.dialetos.base import Perfil
 from db_mcp.errors import SomenteLeitura, SqlInvalido
-from db_mcp.guardrails.sql import validar_somente_leitura
+from db_mcp.guardrails.sql import validar
+
+PG = obter_dialeto("postgres")
+
+
+def _validar_pg(sql: str) -> None:
+    validar(sql, PG, Perfil.SOMENTE_LEITURA)
 
 
 @pytest.mark.parametrize(
@@ -16,7 +24,7 @@ from db_mcp.guardrails.sql import validar_somente_leitura
     ],
 )
 def test_select_valido_passa(sql):
-    validar_somente_leitura(sql)  # não levanta
+    _validar_pg(sql)  # não levanta
 
 
 @pytest.mark.parametrize(
@@ -34,28 +42,28 @@ def test_select_valido_passa(sql):
 )
 def test_escrita_e_ddl_sao_bloqueados(sql):
     with pytest.raises(SomenteLeitura):
-        validar_somente_leitura(sql)
+        _validar_pg(sql)
 
 
 def test_cte_que_escreve_e_bloqueada():
     sql = "WITH x AS (INSERT INTO t VALUES (1) RETURNING *) SELECT * FROM x"
     with pytest.raises(SomenteLeitura):
-        validar_somente_leitura(sql)
+        _validar_pg(sql)
 
 
 def test_multiplas_instrucoes_bloqueadas():
     with pytest.raises(SqlInvalido):
-        validar_somente_leitura("SELECT 1; DROP TABLE t")
+        _validar_pg("SELECT 1; DROP TABLE t")
 
 
 def test_funcao_perigosa_bloqueada():
     with pytest.raises(SomenteLeitura):
-        validar_somente_leitura("SELECT pg_read_file('/etc/passwd')")
+        _validar_pg("SELECT pg_read_file('/etc/passwd')")
 
 
 def test_sql_quebrado_e_invalido():
     with pytest.raises(SqlInvalido):
-        validar_somente_leitura("SELECT FROM WHERE")
+        _validar_pg("SELECT FROM WHERE")
 
 
 @pytest.mark.parametrize(
@@ -89,7 +97,7 @@ def test_sql_quebrado_e_invalido():
 )
 def test_casos_adversariais_bloqueados(sql):
     with pytest.raises((SomenteLeitura, SqlInvalido)):
-        validar_somente_leitura(sql)
+        _validar_pg(sql)
 
 
 @pytest.mark.parametrize(
@@ -101,4 +109,4 @@ def test_casos_adversariais_bloqueados(sql):
     ],
 )
 def test_casos_seguros_passam(sql):
-    validar_somente_leitura(sql)  # não levanta
+    _validar_pg(sql)  # não levanta
