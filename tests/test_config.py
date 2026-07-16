@@ -44,6 +44,27 @@ def test_load_nao_polui_estado_de_classe(tmp_path, monkeypatch):
     assert Settings.model_config.get("yaml_file") is None
 
 
+def test_dialeto_default_e_postgres(tmp_path, monkeypatch):
+    for k, v in {"PG_HOST": "h", "PG_DBNAME": "d", "PG_PASSWORD": "p"}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("DIALETO", raising=False)
+
+    s = Settings.load(env_file=None, yaml_file=str(tmp_path / "inexistente.yaml"))
+
+    assert s.dialeto == "postgres"
+
+
+def test_dialeto_invalido_e_recusado_na_subida(tmp_path, monkeypatch):
+    # Fail-fast: um dialeto que não existe não pode passar da validação e só explodir
+    # lá na frente, na hora de conectar.
+    for k, v in {"PG_HOST": "h", "PG_DBNAME": "d", "PG_PASSWORD": "p"}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("DIALETO", "oracle")
+
+    with pytest.raises(ValidationError):
+        Settings.load(env_file=None, yaml_file=str(tmp_path / "inexistente.yaml"))
+
+
 def test_loads_seguidos_nao_vazam_yaml(tmp_path, monkeypatch):
     monkeypatch.setenv("PG_HOST", "h")
     monkeypatch.setenv("PG_DBNAME", "d")

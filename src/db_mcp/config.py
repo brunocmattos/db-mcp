@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     auth_token: str | None = None
 
     # --- ajustes (via config.yaml, com env como override) ---
+    dialeto: Literal["postgres", "mysql", "sqlserver"] = "postgres"
     transport: Literal["stdio", "http"] = "stdio"
     http_host: str = "127.0.0.1"
     http_port: int = 8080
