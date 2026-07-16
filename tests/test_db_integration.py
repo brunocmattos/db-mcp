@@ -2,10 +2,10 @@ import os
 
 import pytest
 
-from pg_readonly_mcp.config import Settings
-from pg_readonly_mcp.db import Database
-from pg_readonly_mcp.errors import ErroBanco
-from pg_readonly_mcp.server import Nucleo
+from db_mcp.config import Settings
+from db_mcp.db import Database
+from db_mcp.errors import ErroBanco
+from db_mcp.server import Nucleo
 
 # Roda só quando há banco configurado: um .env na raiz OU PG_HOST no ambiente.
 _TEM_BANCO = os.path.exists(".env") or bool(os.getenv("PG_HOST"))

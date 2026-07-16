@@ -1,6 +1,6 @@
 import threading
 
-from pg_readonly_mcp.guardrails.ratelimit import RateLimiter
+from db_mcp.guardrails.ratelimit import RateLimiter
 
 
 def test_estoura_e_recupera_com_o_tempo():

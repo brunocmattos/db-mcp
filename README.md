@@ -1,6 +1,6 @@
-# pg-readonly-mcp
+# db-mcp
 
-[![CI](https://github.com/brunocmattos/pg-readonly-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/brunocmattos/pg-readonly-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/brunocmattos/db-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/brunocmattos/db-mcp/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -47,13 +47,13 @@ com o usuário read-only `mcp_ro` pronto:
 ```bash
 docker compose up -d                            # Postgres de demo na porta 5433
 uv sync                                          # instala o MCP
-uv run pg-readonly-mcp --env .env.demo doctor    # confere tudo
+uv run db-mcp --env .env.demo doctor    # confere tudo
 ```
 
 Saída (real, contra o container acima):
 
 ```text
-== pg-readonly-mcp doctor ==
+== db-mcp doctor ==
 ✅ [OK] Config OK  —  mcp_ro@localhost:5433/demo · allowlist=['*']
 ✅ [OK] TCP OK  —  conectou em 9 ms
 ✅ [OK] Autenticou  —  current_user=mcp_ro · db=demo
@@ -78,7 +78,7 @@ consultar("UPDATE clientes SET cidade = 'x'")
 → {"erro": "somente_leitura", "detalhe": "apenas comandos SELECT são permitidos"}
 ```
 
-Para subir o servidor apontado nesse banco: `uv run pg-readonly-mcp --env .env.demo`.
+Para subir o servidor apontado nesse banco: `uv run db-mcp --env .env.demo`.
 Para desligar e apagar tudo: `docker compose down -v`.
 
 ## Instalação
@@ -96,8 +96,8 @@ Resumo (na mão):
 ```bash
 uv sync                       # instala tudo
 cp .env.example .env          # preencha PG_HOST/PG_DBNAME/PG_PASSWORD...
-uv run pg-readonly-mcp doctor # verifica config, rede, auth, read-only, allowlist, latencia
-uv run pg-readonly-mcp        # sobe o servidor (stdio)
+uv run db-mcp doctor # verifica config, rede, auth, read-only, allowlist, latencia
+uv run db-mcp        # sobe o servidor (stdio)
 ```
 
 O `doctor` só fica verde com o banco já preparado (usuário `mcp_ro` +
@@ -106,7 +106,7 @@ passo, as checagens de auth e de read-only falham.
 
 ## Verificação
 
-`uv run pg-readonly-mcp doctor` roda 6 checagens (config válida, TCP alcança o host,
+`uv run db-mcp doctor` roda 6 checagens (config válida, TCP alcança o host,
 autentica como o usuário read-only, confirma que é read-only, tabelas da allowlist existem,
 latência de uma query trivial) e sai com código `0` se tudo passar. Veja
 [`docs/04-troubleshooting.md`](docs/04-troubleshooting.md) para interpretar cada falha.

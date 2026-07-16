@@ -1,7 +1,7 @@
 import pytest
 
-from pg_readonly_mcp.errors import SomenteLeitura, SqlInvalido
-from pg_readonly_mcp.guardrails.sql import validar_somente_leitura
+from db_mcp.errors import SomenteLeitura, SqlInvalido
+from db_mcp.guardrails.sql import validar_somente_leitura
 
 
 @pytest.mark.parametrize(

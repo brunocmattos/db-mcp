@@ -145,7 +145,7 @@ def executar_doctor(env_file: str | None, yaml_file: str, modo_cor: str = "auto"
     ctx = Contexto(env_file, yaml_file)
     cor = _decidir_cor(modo_cor, sys.stdout)
     emoji = _suporta_emoji(sys.stdout)
-    print(_pinta("== pg-readonly-mcp doctor ==", NEGRITO, cor))
+    print(_pinta("== db-mcp doctor ==", NEGRITO, cor))
     return rodar(CHECAGENS, ctx, cor, emoji)
 
 
@@ -208,7 +208,7 @@ def checar_auth(ctx: Contexto) -> Resultado:
         password=s.pg_password,
         sslmode=s.pg_sslmode,
         connect_timeout=5,
-        application_name="pg-readonly-mcp/doctor",
+        application_name="db-mcp/doctor",
     )
     try:
         ctx.conn = psycopg.connect(conninfo, autocommit=True)

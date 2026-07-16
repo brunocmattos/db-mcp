@@ -32,7 +32,7 @@ valores deste ambiente. Serve de histórico e de "desfazer" se precisar.>
 <Limites diferentes do default? MAX_ROWS, RATE_LIMIT_PER_MIN, transporte, etc.>
 
 ## 7. Verificação (doctor)
-<Resultado do `pg-readonly-mcp doctor` na última execução: passou/falhou em cada checagem.>
+<Resultado do `db-mcp doctor` na última execução: passou/falhou em cada checagem.>
 
 ## 8. Notas de segurança
 <Qualquer coisa relevante: banco exposto? VPN obrigatória? rotação de senha?>

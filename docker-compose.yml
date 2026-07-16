@@ -2,15 +2,15 @@
 # Serve pra experimentar o MCP sem apontar pro seu banco.
 #
 #   docker compose up -d
-#   uv run pg-readonly-mcp --env .env.demo doctor   # deve ficar tudo verde
-#   uv run pg-readonly-mcp --env .env.demo           # sobe o servidor (stdio)
+#   uv run db-mcp --env .env.demo doctor   # deve ficar tudo verde
+#   uv run db-mcp --env .env.demo           # sobe o servidor (stdio)
 #
 # Porta 5433 no host pra não colidir com um Postgres que você já tenha na 5432.
 
 services:
   db:
     image: postgres:17-alpine
-    container_name: pg-readonly-mcp-demo
+    container_name: db-mcp-demo
     environment:
       POSTGRES_DB: demo
       POSTGRES_USER: postgres

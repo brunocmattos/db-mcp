@@ -1,7 +1,7 @@
 import json
 import threading
 
-from pg_readonly_mcp.observability import Auditoria
+from db_mcp.observability import Auditoria
 
 
 def test_grava_linha_json(tmp_path):

@@ -54,7 +54,7 @@ PG_SSLMODE=prefer
 ## 3. Verificar
 
 ```bash
-uv run pg-readonly-mcp doctor
+uv run db-mcp doctor
 ```
 
 Deve mostrar 6 checagens e sair com código `0`. Cada `[X]` vem com a remediação;
@@ -64,7 +64,7 @@ ou de read-only falharem, é sinal de que o Passo 0 ainda não foi feito.
 ## 4. Subir o servidor (dev, stdio)
 
 ```bash
-uv run pg-readonly-mcp
+uv run db-mcp
 ```
 
 ## 5. Registrar no cliente MCP
@@ -77,7 +77,7 @@ segredo na config do cliente; basta apontar pro comando.
 ```bash
 # escopo "user" = disponível em todos os seus projetos
 claude mcp add --scope user pg-readonly \
-  -- uv run --directory /CAMINHO/ABSOLUTO/pg-readonly-mcp pg-readonly-mcp
+  -- uv run --directory /CAMINHO/ABSOLUTO/db-mcp db-mcp
 ```
 
 Confira com `claude mcp list` e `claude mcp get pg-readonly`. O `--directory` é
@@ -94,7 +94,7 @@ Para compartilhar com o time via git, sem segredos (cada um define suas vars de 
     "pg-readonly": {
       "type": "stdio",
       "command": "uv",
-      "args": ["run", "--directory", "${CLAUDE_PROJECT_DIR:-.}", "pg-readonly-mcp"]
+      "args": ["run", "--directory", "${CLAUDE_PROJECT_DIR:-.}", "db-mcp"]
     }
   }
 }
@@ -112,7 +112,7 @@ Edite o arquivo de config (Settings → Developer → Edit Config, ou direto):
   "mcpServers": {
     "pg-readonly": {
       "command": "uv",
-      "args": ["run", "--directory", "C:\\CAMINHO\\ABSOLUTO\\pg-readonly-mcp", "pg-readonly-mcp"]
+      "args": ["run", "--directory", "C:\\CAMINHO\\ABSOLUTO\\db-mcp", "db-mcp"]
     }
   }
 }
@@ -134,19 +134,19 @@ http_host: 0.0.0.0
 http_port: 8080
 ```
 
-Defina `AUTH_TOKEN` no `.env`. Exemplo de unit (`/etc/systemd/system/pg-readonly-mcp.service`):
+Defina `AUTH_TOKEN` no `.env`. Exemplo de unit (`/etc/systemd/system/db-mcp.service`):
 
 ```ini
 [Unit]
-Description=pg-readonly-mcp (MCP somente-leitura para PostgreSQL)
+Description=db-mcp (MCP somente-leitura para PostgreSQL)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=SEU_USUARIO_DE_SERVICO
-WorkingDirectory=/CAMINHO/ABSOLUTO/pg-readonly-mcp
-ExecStart=/CAMINHO/PARA/uv run pg-readonly-mcp
+WorkingDirectory=/CAMINHO/ABSOLUTO/db-mcp
+ExecStart=/CAMINHO/PARA/uv run db-mcp
 Restart=on-failure
 RestartSec=5
 
@@ -156,7 +156,7 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now pg-readonly-mcp
+sudo systemctl enable --now db-mcp
 ```
 
 Problemas? [`04-troubleshooting.md`](04-troubleshooting.md).

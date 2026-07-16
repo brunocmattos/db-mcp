@@ -1,6 +1,6 @@
 # deployments/ (privado)
 
-Registro de cada ambiente onde o `pg-readonly-mcp` foi instalado: host, porta, banco,
+Registro de cada ambiente onde o `db-mcp` foi instalado: host, porta, banco,
 como o usuário read-only foi criado, faixas de rede liberadas, allowlist escolhida e onde
 a senha está guardada.
 

@@ -27,7 +27,7 @@ Cliente MCP / Agente  ──MCP (stdio ou HTTP+token)──▶  server.py (FastM
                                           pg_hba por IP   (Cadeado nº 2)
 ```
 
-## Componentes (`src/pg_readonly_mcp/`)
+## Componentes (`src/db_mcp/`)
 
 | Arquivo | Responsabilidade |
 |---|---|
@@ -65,7 +65,7 @@ teto — quando `truncado` é `true`, o resultado foi cortado.
 
 Erros tratados viram um `codigo` estável (`sql_invalido`, `somente_leitura`,
 `fora_da_allowlist`, `limite_de_taxa`, `resultado_grande_demais`, `timeout`, `erro_banco`),
-definido em [`errors.py`](../src/pg_readonly_mcp/errors.py). Toda consulta vira uma linha na
+definido em [`errors.py`](../src/db_mcp/errors.py). Toda consulta vira uma linha na
 auditoria — as que passam com `veredito` `ok`, as recusadas com o código do erro. As
 ferramentas que devolvem dados (`amostra`, `consultar`) entregam esse código num objeto
 `{"erro", "detalhe"}`; as de introspecção, que devolvem listas, propagam o erro.
