@@ -245,14 +245,23 @@ fase mais arriscada: driver menos convencional, sem reset de sessão, timeout cl
 
 ## 9. Testes e CI
 
-**O probe adversarial vira suite de verdade, por dialeto.** Na sessão de 2026-07-16 escrevi um
-probe que rodou 15 ataques contra o Postgres vivo (write, DDL, `;` empilhado, `SELECT INTO`,
-`FOR UPDATE`, CTE com `DELETE`, `pg_read_file` inclusive com aspas e `pg_catalog.` na frente,
-`pg_sleep`, `set_config`, advisory lock, `query_to_xml`, `nextval`) e confirmou os casos de
-borda de sombreamento de CTE. Barrou 15/15. **Isso hoje só existe num scratchpad temporário** —
-vira `tests/test_ataques_<dialeto>.py`, com a tabela de ataques parametrizada por dialeto.
-É o ativo mais valioso produzido naquela sessão e o que mais protege contra a divergência que
-motivou a decisão 1.
+**A suite de ataques já existe — o que falta é parametrizá-la por dialeto.**
+`tests/test_sql.py::test_casos_adversariais_bloqueados` já cobre os 24 ataques do Postgres
+(incluindo evasão por aspas, qualificação com `pg_catalog.`, `query_to_xml`, advisory lock,
+`set_config`), e `tests/test_policy.py` já cobre os casos de sombreamento de CTE
+(`test_cte_irmao_posterior_nao_sombreia_tabela_real`). O trabalho da Fase 0 **não** é escrever
+essa suite: é **reestruturá-la para receber o dialeto**, de forma que Fases 1 e 2 só acrescentem
+a sua tabela de ataques (MySQL: `load_file`, `sleep`, `benchmark`; T-SQL: `openquery`,
+`openrowset`, `opendatasource`). É essa estrutura parametrizada que protege contra a divergência
+que motivou a decisão 1.
+
+**O que falta de verdade é teste de fiação (e2e).** Os testes acima exercitam
+`validar_somente_leitura()` **isolado, sem banco**. O `test_e2e_integration.py` toca o caminho
+completo, mas só com dois casos (um `SELECT 1` e um `DELETE`). Falta provar, contra o banco
+vivo, que os guardrails estão **ligados** no caminho `Nucleo.consultar` → guardrails → pool →
+banco — um validador correto que não foi plugado não protege ninguém. Isso vira
+`tests/test_ataques_e2e.py`, parametrizado por dialeto, com um subconjunto representativo (não
+a lista inteira: a cobertura da lista é dos testes unitários; aqui o alvo é a fiação).
 
 **Regressão de parser:** os casos que hoje falham fechado por `ParseError` (`INTO OUTFILE`,
 `WAITFOR DELAY`) ganham teste explícito. Se um upgrade do sqlglot passar a parseá-los, o teste
