@@ -160,3 +160,32 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
 - [ ] **Escrita configurável** — spec próprio, quando chegar a hora. Ver o princípio acima.
 - [ ] Dívida menor: `conn: Any` em `dialetos/postgres.py::_configurar/_resetar` — dá pra manter
   `psycopg.Connection` via `TYPE_CHECKING` e não perder a precisão de tipo.
+
+## Pendências — auditoria 2026-07-16
+### Erros / quebrado
+- [ ] `docs/DESIGN.md:43` ainda lista "Outros SGBDs além de PostgreSQL" como não-objetivo
+  ("nunca") — contradiz a Fase 0 multi-dialeto em andamento (spec + plano do mesmo dia). O
+  arquivo não foi tocado desde o commit do rename (`52bd464`), antes do trabalho multi-dialeto
+  começar.
+- [ ] `docs/03-arquitetura.md:21,35` descreve `db.py` como dono do "pool psycopg 3" —
+  desatualizado desde o commit `8864f69` (T5): hoje `db.py` não importa `psycopg`, o pool vem
+  de `dialetos/postgres.py`.
+- [ ] `guardrails/sql.py:108` e `guardrails/policy.py:28,77` continuam com
+  `sqlglot.parse(..., read="postgres")` / `dialect="postgres"` hardcoded — é o defeito T7 já
+  registrado no Backlog (inofensivo hoje, vira bug real na Fase 1/2).
+- [ ] `dialetos/postgres.py:154` (`sql_amostra`) existe e tem teste próprio
+  (`test_dialetos.py:29`) mas não é chamado por ninguém: `server.py:179` monta
+  `f"SELECT * FROM {tabela} LIMIT {n}"` na mão — confirma o defeito T8 do Backlog.
+- [ ] `tests/test_ataques_e2e.py` (teste de fiação e2e do plano, T10) ainda não existe —
+  confirma T10-T12 em aberto.
+
+### Sugestões
+- [ ] `CHANGELOG.md` para em 0.2.0 (2026-07-10); `pyproject.toml` já está em 0.3.0 e o rename +
+  Fase 0 T1-T5 aconteceram depois — vale um entry novo quando a Fase 0 fechar.
+- [ ] Todo commit do repo (o único público do portfólio) tem autor
+  `bruno.outcore@guarida.com.br` — liga a identidade pública do GitHub ao empregador. Considerar
+  `git config user.email` dedicado a este repo se a separação pessoal/Guarida importar.
+- [ ] `db.py:23-25` (docstring de `executar`) descreve `params` como o que hoje "mantém a
+  introspecção livre de injeção" — mas nenhum caller passa `params` ainda (`server.py` usa
+  `_validar_ident` + f-string). Vale marcar a docstring como aspiracional (aponta pra T9) até a
+  costura entrar.
