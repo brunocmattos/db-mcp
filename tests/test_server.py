@@ -62,6 +62,24 @@ def test_consulta_rejeitada_entra_na_auditoria(monkeypatch, tmp_path):
     assert registro["cliente"] == "atacante"
 
 
+def test_sql_malformado_entra_na_auditoria(monkeypatch, tmp_path):
+    # Regressão de FIAÇÃO: o TokenError do sqlglot (aspa nunca fechada) não é subclasse
+    # de ParseError, então escapava do validador cru, escapava do `except McpDbError`
+    # daqui e a recusa saía SEM rastro. Falhava fechado, mas sem auditoria — e é a
+    # auditoria que prova o que foi tentado. Não basta o validador recusar: tem que
+    # recusar em McpDbError, senão esta linha de log não existe.
+    log = tmp_path / "a.log"
+    s = _settings(monkeypatch, audit_log_path=str(log))
+    nucleo = Nucleo(s, db=FakeDB())
+
+    with pytest.raises(SqlInvalido):
+        nucleo.consultar("SELECT * FROM t WHERE x = 'aberta", cliente="atacante")
+
+    registro = json.loads(log.read_text(encoding="utf-8").strip())
+    assert registro["veredito"] == "sql_invalido"
+    assert registro["cliente"] == "atacante"
+
+
 def test_erro_do_banco_e_auditado(monkeypatch, tmp_path):
     # Um erro vindo do banco (já embrulhado em ErroBanco pelo db.py) tem que virar
     # linha de auditoria, não escapar silencioso.

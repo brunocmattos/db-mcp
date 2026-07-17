@@ -69,6 +69,24 @@ def test_sql_quebrado_e_invalido():
 @pytest.mark.parametrize(
     "sql",
     [
+        "SELECT * FROM t WHERE x = 'aberta",  # aspa simples nunca fechada
+        'SELECT " FROM t',  # aspa dupla nunca fechada
+        "SELECT * FROM t WHERE x = 'a' || 'b",  # aspa aberta depois de string válida
+    ],
+)
+def test_sql_malformado_vira_recusa_tratada(sql):
+    # Regressão: quando o TOKENIZER morre antes do parser, o sqlglot levanta TokenError —
+    # que NÃO é subclasse de ParseError (são irmãs sob SqlglotError). Com `except ParseError`
+    # isto vazava cru: não virava SqlInvalido, escapava do `except McpDbError` do server.py
+    # e a recusa saía SEM auditoria. Falhava fechado (a query não chegava no banco), mas
+    # sem rastro — e o rastro é o que mais importa na trilha.
+    with pytest.raises(SqlInvalido):
+        _validar_pg(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
         "SELECT pg_sleep(10)",  # função de DoS
         "COPY clientes TO '/tmp/x'",  # COPY (exfiltração/escrita)
         "SELECT lo_export(1, '/tmp/x')",  # escrita de arquivo em disco
