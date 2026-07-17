@@ -223,29 +223,34 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
 - [ ] Dívida menor: `conn: Any` em `dialetos/postgres.py::_configurar/_resetar` — dá pra manter
   `psycopg.Connection` via `TYPE_CHECKING` e não perder a precisão de tipo.
 
-## Pendências — auditoria 2026-07-16
+## Pendências — auditoria 2026-07-17
 ### Erros / quebrado
 - [ ] `docs/DESIGN.md:43` ainda lista "Outros SGBDs além de PostgreSQL" como não-objetivo
-  ("nunca") — contradiz a Fase 0 multi-dialeto em andamento (spec + plano do mesmo dia). O
-  arquivo não foi tocado desde o commit do rename (`52bd464`), antes do trabalho multi-dialeto
-  começar.
+  ("nunca") — contradiz a Fase 0 multi-dialeto em andamento. **Ainda não tocado** desde o
+  commit do rename (`52bd464`, 2026-07-16) — verificado de novo hoje, nenhuma mudança.
 - [ ] `docs/03-arquitetura.md:21,35` descreve `db.py` como dono do "pool psycopg 3" —
-  desatualizado desde o commit `8864f69` (T5): hoje `db.py` não importa `psycopg`, o pool vem
-  de `dialetos/postgres.py`.
-- [x] ~~`guardrails/sql.py:108`~~ **resolvido pela T6** (commit `7c39ada`) e ~~`policy.py:28,77`~~
-  **resolvido pela T7 em 2026-07-17** (commit `646ba6b`): o `dialect="postgres"` cravado saiu.
-  Verificado depois da T7 — **nenhum dialeto cravado sobra no caminho de query**; as ocorrências
-  restantes de `"postgres"` no `src/` são todas legítimas (`choices` do CLI, default do config, o
-  próprio módulo se nomeando).
-- [x] ~~`dialetos/postgres.py:154` (`sql_amostra`) não é chamado por ninguém~~ — **resolvido pela
-  T8 em 2026-07-17** (commit `67b6485`): o `server.py` largou a f-string e delega ao dialeto.
-  Fiação confirmada no servidor real (SQL auditado com aspas).
+  **ainda desatualizado** desde o commit `8864f69` (T5): hoje `db.py` não importa `psycopg`, o
+  pool vem de `dialetos/postgres.py`. Verificado de novo hoje, nenhuma mudança.
+- [ ] 🆕 **A branch `main` (a que o GitHub mostra por padrão neste repo PÚBLICO) está 14 commits
+  atrás de `refactor/fase-0-multi-dialeto`** (medido: `git rev-list --count main..refactor/...`).
+  Quem visita `github.com/brunocmattos/db-mcp` sem saber trocar de branch vê: `pyproject.toml`
+  ainda como `pg-readonly-mcp` 0.2.0, e `guardrails/sql.py:111` ainda com `except ParseError` —
+  o defeito vivo do `TokenError` (recusa sem auditoria) que a T8 corrigiu (`74aba49`) **só existe
+  corrigido na branch, não no que o repo mostra por padrão**. Sem risco de exploração hoje (nada
+  em produção), mas é a versão "oficial" pública contando uma história desatualizada. Não fixar
+  antes de T9-T12 (a Fase 0 ainda não fechou) — mas vale um merge/fast-forward de `main` quando
+  fechar, ou uma nota no README de que `main` pode ficar atrás durante a Fase 0.
 - [ ] `tests/test_ataques_e2e.py` (teste de fiação e2e do plano, T10) ainda não existe —
   confirma T10-T12 em aberto.
+- [ ] (não é regressão, já no Backlog, revalidado hoje) `descrever_tabela`/`listar_tabelas`/
+  `listar_views` chamam `_validar_ident` **fora** do `try/except McpDbError` (`server.py`) — um
+  identificador inválido estoura `ToolError` cru, sem passar por `Nucleo.consultar`, logo **sem
+  auditoria**. Fail-closed (nada vaza), mas fura a propriedade nº 1 que o projeto declara
+  (toda recusa auditada). Confirmado lendo o código hoje — segue exatamente como o Backlog descreve.
 
 ### Sugestões
 - [ ] `CHANGELOG.md` para em 0.2.0 (2026-07-10); `pyproject.toml` já está em 0.3.0 e o rename +
-  Fase 0 T1-T5 aconteceram depois — vale um entry novo quando a Fase 0 fechar.
+  Fase 0 T1-T8 aconteceram depois — vale um entry novo quando a Fase 0 fechar.
 - [ ] Todo commit do repo (o único público do portfólio) tem autor
   `bruno.outcore@guarida.com.br` — liga a identidade pública do GitHub ao empregador. Considerar
   `git config user.email` dedicado a este repo se a separação pessoal/Guarida importar.
