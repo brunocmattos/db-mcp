@@ -1,5 +1,51 @@
 # Worklog — db-mcp
 
+## 2026-07-17 · Manutenção — Fase 0, T7 e T8 (e um defeito vivo que não estava no plano)
+**O quê:** a sessão abriu para a **Task 7** e emendou a **Task 8**.   ·   **Objetivo:** os defeitos
+5.1 e 5.2 do spec — `policy.py` e `amostra` param de cravar Postgres — com a suíte verde e **zero
+mudança de comportamento** no Postgres.
+
+**Feito:**
+- **T7 — commit `646ba6b`.** `policy.py` lê e emite no dialeto alvo. **Desvio do plano, aprovado
+  pelo Bruno:** `tabelas_referenciadas`/`checar_allowlist` ficaram com o dialeto **obrigatório**, sem
+  o default `"postgres"` do plano (o default existia só pra poupar edição de teste, num caminho de
+  segurança). Dividendo na hora: o mypy acusou os 2 callers do `server.py` — falha no CI, não na
+  query. Os 19 testes existentes passaram **sem mudar uma expectativa** (verificado no diff: toda
+  assertion removida tem contrapartida idêntica + `, PG`).
+- **🐛 O achado da sessão — commit `74aba49`, fora do plano.** Revisando a T8 medi que `TokenError`
+  **não é subclasse de `ParseError`** (são irmãs sob `SqlglotError`). O `except ParseError` do
+  validador — cadeado nº 3(a) — deixava vazar recusa por aspa não fechada: não virava `SqlInvalido`,
+  escapava do `except McpDbError` do `server.py` e **saía sem auditoria**. Alcançável por qualquer
+  cliente na config padrão (`allow_freeform_sql=True`). Medido no caminho real do `Nucleo`: **1 de 3
+  recusas auditadas antes, 3 de 3 depois.** Falhava fechado (nada vazava), mas furava a propriedade
+  que o projeto declara a mais importante.
+- **T8 — commit `67b6485`.** `amostra` delega ao dialeto. O `_validar_qualificado` **saiu** (ficou
+  sem caller; o parse `into=exp.Table` é defesa mais estrita) e seu corpus de ataques foi
+  **re-apontado** pro `sql_amostra`: de 4 pra 8 casos, nenhum perdido. **Fiação provada no servidor
+  real** contra o demo: o SQL auditado saiu `SELECT * FROM "clientes" LIMIT 2` — a aspa é a
+  assinatura do dialeto, a f-string antiga não a produziria.
+- **O plano estava errado nos detalhes nas duas tasks, e isso foi registrado, não contornado:** a T7
+  descrevia o defeito ao contrário (`TOP 9999` → `LIMIT 1000` **não** acontecia — dava `ParseError`;
+  o caso real era a query T-SQL **sem** limite, que saía com `LIMIT` grudado); a T8 prescrevia um
+  teste **tautológico** (re-testava o `sql_amostra`, já coberto em `test_dialetos.py:29`, sem tocar
+  na mudança) e mandava escrever `except ParseError` — replicando o bug acima num segundo lugar.
+- **Verificação:** 141 passed / **zero skipped** com o demo (eram 127 ao abrir) · 132/9 sem banco ·
+  `doctor` 6/6 · ruff, format e mypy limpos · os 7 casos do Postgres no `injetar_limit` saem
+  idênticos aos de antes.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção** — segue sem deployment; o único consumidor é o demo
+Docker. ✅ **Tudo pushado** (3 commits) e working tree limpo. 🐛 **Lacuna aberta, no Backlog:** recusa
+na camada de transporte **não vira auditoria** — medido: `amostra` com nome injetado devolve erro
+limpo mas **sem rastro**, e `descrever_tabela` com ident inválido **estoura `ToolError` cru**. É
+pré-existente (verificado no código anterior à T8), não regressão. Converge com a outra lacuna: as
+tools são **intestáveis sem banco** (sem ponto de injeção no `construir_servidor`) — um movimento só
+resolve as duas, descendo a lógica pro `Nucleo`. 📌 O container `db-mcp-demo` ficou **de pé**.
+
+**Próximo:** **Task 9** — introspecção por **query parameters**. Vale avaliar juntar com a lacuna de
+auditoria das tools: a T9 mexe exatamente no `_validar_ident`, que é uma das validações que hoje
+recusam sem deixar rastro. Depois **T10-T12** (doctor, fiação e2e, docs + verificação final). E
+**ler o plano com desconfiança** — ele errou nas duas tasks desta sessão.
+
 ## 2026-07-16 · Manutenção — Fase 0, Task 6: o validador recebe o dialeto
 **O quê:** a sessão abriu com uma dúvida ("não sei se to abrindo na branch certa" — estava certa:
 `refactor/fase-0-multi-dialeto`) e seguiu pra **Task 6** do plano da Fase 0.   ·   **Objetivo:**
