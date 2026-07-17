@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import sqlglot
 from sqlglot import exp
-from sqlglot.errors import ParseError
+from sqlglot.errors import SqlglotError
 
 from ..errors import SomenteLeitura, SqlInvalido
 
@@ -55,7 +55,11 @@ def validar(sql: str, dialeto: Dialeto, perfil: Perfil) -> None:
             )
             if a is not None
         ]
-    except ParseError as e:
+    except SqlglotError as e:
+        # SqlglotError, não ParseError: quando o TOKENIZER morre antes do parser (aspa
+        # nunca fechada), o sqlglot levanta TokenError — irmã de ParseError, não filha.
+        # Um `except ParseError` a deixava vazar crua, e uma recusa que escapa do
+        # McpDbError é uma recusa sem auditoria. A mãe das duas fecha a família inteira.
         raise SqlInvalido(f"SQL inválido: {e}") from e
 
     if len(arvores) != 1:
