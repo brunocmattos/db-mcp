@@ -18,14 +18,17 @@ def _tabelas_todas(arvore: exp.Expression) -> set[str]:
     return nomes
 
 
-def tabelas_referenciadas(sql: str) -> set[str]:
+def tabelas_referenciadas(sql: str, dialeto: str) -> set[str]:
     """Nomes de tabela reais citados na query (qualificados com schema quando houver).
 
     Usa a análise de escopo do sqlglot pra distinguir tabela do banco de referência a CTE
     (`WITH x AS ...`), respeitando o escopo de verdade — inclusive que um `WITH` não-recursivo
     não deixa um CTE enxergar um irmão definido depois. Se a análise falhar, cai no modo
-    conservador (checa todas as tabelas), que erra pro lado seguro."""
-    arvore = cast(exp.Expression, sqlglot.parse_one(sql, read="postgres"))
+    conservador (checa todas as tabelas), que erra pro lado seguro.
+
+    `dialeto` é o dialeto do sqlglot ("postgres" | "mysql" | "tsql") e NÃO tem default:
+    ler no dialeto errado é ler outra query, e isto alimenta a allowlist (cadeado nº 3b)."""
+    arvore = cast(exp.Expression, sqlglot.parse_one(sql, read=dialeto))
     try:
         escopos = traverse_scope(arvore)
     except Exception:
@@ -58,11 +61,11 @@ def _tabela_permitida(tab: str, permitidas: set[str]) -> bool:
     return tab.split(".")[-1] in nao_qualificadas
 
 
-def checar_allowlist(sql: str, allowlist: list[str]) -> None:
+def checar_allowlist(sql: str, allowlist: list[str], dialeto: str) -> None:
     if "*" in allowlist:
         return
     permitidas = set(allowlist)
-    for tab in tabelas_referenciadas(sql):
+    for tab in tabelas_referenciadas(sql, dialeto):
         schema = tab.split(".")[0] if "." in tab else None
         if schema in SCHEMAS_SISTEMA:
             continue  # catálogos do sistema (information_schema/pg_catalog) sempre liberados
@@ -70,11 +73,16 @@ def checar_allowlist(sql: str, allowlist: list[str]) -> None:
             raise ForaDaAllowlist(f"tabela não liberada: {tab}")
 
 
-def injetar_limit(sql: str, teto: int) -> str:
-    """Garante que a query não peça mais que `teto` linhas. Se já houver um `LIMIT`/`FETCH`
+def injetar_limit(sql: str, teto: int, dialeto: str) -> str:
+    """Garante que a query não peça mais que `teto` linhas. Se já houver um limite
     literal dentro do teto, respeita sem mexer; qualquer outra forma (sem limite, `LIMIT ALL`,
-    limite gigante ou não-literal, `FETCH FIRST n ROWS`) é normalizada pra `LIMIT teto`."""
-    arvore = cast(exp.Query, sqlglot.parse_one(sql, read="postgres"))
+    limite gigante ou não-literal, `FETCH FIRST n ROWS`) é normalizada pro teto.
+
+    `dialeto` é o dialeto do sqlglot ("postgres" | "mysql" | "tsql"): o SQL tem que SAIR na
+    sintaxe do banco alvo, e no T-SQL não existe `LIMIT` — o sqlglot emite `TOP`. O parse
+    e a emissão usam o mesmo dialeto de propósito: são a leitura e a escrita da mesma query.
+    """
+    arvore = cast(exp.Query, sqlglot.parse_one(sql, read=dialeto))
     limite = arvore.args.get("limit")
     if isinstance(limite, exp.Limit):
         valor = limite.expression
@@ -84,4 +92,4 @@ def injetar_limit(sql: str, teto: int) -> str:
         contagem = limite.args.get("count")
         if isinstance(contagem, exp.Literal) and contagem.is_int and int(contagem.name) <= teto:
             return sql
-    return arvore.limit(teto).sql(dialect="postgres")
+    return arvore.limit(teto).sql(dialect=dialeto)
