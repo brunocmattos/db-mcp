@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING, Any
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.errors import SqlglotError
+
+from ..errors import SqlInvalido
 
 if TYPE_CHECKING:
     from ..config import Settings
@@ -152,7 +155,18 @@ class DialetoPostgres:
             yield cur
 
     def sql_amostra(self, tabela: str, n: int) -> str:
-        tab = sqlglot.parse_one(tabela, into=exp.Table, read=self.sqlglot_dialeto)
+        """SQL de amostra com o nome CITADO (identify=True), no lugar de interpolar cru.
+
+        O parse `into=exp.Table` é a defesa: ele recusa qualquer coisa que não seja um
+        nome de tabela (`t; DROP`, `t WHERE 1=1`, `(SELECT 1)`) — mais estrito que a
+        regex que vivia no server.py, e sem o viés de Postgres dela. SqlglotError, não
+        ParseError: o tokenizer levanta TokenError, que é irmã e não filha (ver
+        guardrails/sql.py). Deixar vazar seria recusa sem auditoria.
+        """
+        try:
+            tab = sqlglot.parse_one(tabela, into=exp.Table, read=self.sqlglot_dialeto)
+        except SqlglotError as e:
+            raise SqlInvalido(f"nome de tabela inválido: {tabela!r}") from e
         return f"SELECT * FROM {tab.sql(dialect=self.sqlglot_dialeto, identify=True)} LIMIT {n}"
 
     def sql_probe_escrita(self) -> str:

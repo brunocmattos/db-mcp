@@ -9,7 +9,6 @@ from db_mcp.server import (
     Nucleo,
     _identificar_cliente,
     _validar_ident,
-    _validar_qualificado,
     construir_servidor,
 )
 
@@ -155,15 +154,46 @@ def test_validar_ident_bloqueia_injecao(mau):
         _validar_ident(mau)
 
 
-def test_validar_qualificado_aceita_schema_tabela():
-    assert _validar_qualificado("public.clientes") == "public.clientes"
-    assert _validar_qualificado("clientes") == "clientes"
+# --- Defeito 5.2: o nome da tabela é do dialeto, não de uma regex daqui --------------
+# A T8 removeu o `_validar_qualificado` (regex no server.py) — a defesa passou a ser o
+# parse `into=exp.Table` do dialeto. O corpus de ataques abaixo é o MESMO que apontava
+# pra regex: mudou quem barra, não se barra.
 
 
-@pytest.mark.parametrize("mau", ["public.x' UNION SELECT 1", "a.b.c", "'; DROP", "public.a b"])
-def test_validar_qualificado_bloqueia_injecao(mau):
+def test_sql_amostra_aceita_schema_tabela():
+    d = obter_dialeto("postgres")
+    assert d.sql_amostra("public.clientes", 5) == 'SELECT * FROM "public"."clientes" LIMIT 5'
+    assert d.sql_amostra("clientes", 5) == 'SELECT * FROM "clientes" LIMIT 5'
+
+
+@pytest.mark.parametrize(
+    "mau",
+    [
+        "public.x' UNION SELECT 1",  # herdados do corpus do _validar_qualificado
+        "'; DROP",
+        "public.a b",
+        "t; DROP TABLE x",  # novos: o parse é mais estrito que a regex era
+        "t WHERE 1=1",
+        "t LIMIT 999999",
+        "(SELECT 1)",
+        "",
+    ],
+)
+def test_sql_amostra_bloqueia_injecao_no_nome(mau):
     with pytest.raises(SqlInvalido):
-        _validar_qualificado(mau)
+        obter_dialeto("postgres").sql_amostra(mau, 10)
+
+
+def test_sql_amostra_deixa_passar_nome_de_3_partes():
+    # Mudança de comportamento HONESTA da T8, medida e registrada em vez de escondida:
+    # a regex barrava mais de 2 partes; o parse do dialeto aceita catalog.schema.tabela.
+    # No Postgres isso morre no banco ("cross-database references are not implemented")
+    # — falha fechada e auditada, só que mais tarde do que antes.
+    # ⚠️ Fase 2: o SQL Server resolve nome de 3 partes DE VERDADE (cross-database), e o
+    # `tabelas_referenciadas` ignora o catalog ao montar o nome pra allowlist. Lá isto
+    # deixa de ser cosmético.
+    d = obter_dialeto("postgres")
+    assert d.sql_amostra("a.b.c", 10) == 'SELECT * FROM "a"."b"."c" LIMIT 10'
 
 
 def test_servidor_com_auth_token_configura_auth(monkeypatch):

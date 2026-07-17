@@ -42,14 +42,6 @@ def _validar_ident(nome: str) -> str:
     return nome
 
 
-def _validar_qualificado(nome: str) -> str:
-    """Valida 'tabela' ou 'schema.tabela'. Bloqueia injeção de SQL na ferramenta amostra."""
-    partes = (nome or "").split(".")
-    if len(partes) > 2 or not all(_IDENT.match(p) for p in partes):
-        raise SqlInvalido(f"nome de tabela inválido: {nome!r}")
-    return nome
-
-
 class Nucleo:
     """Junta guardrails + db. Independente do transporte MCP (testável isolado)."""
 
@@ -175,10 +167,13 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
     def amostra(tabela: str, n: int = 10) -> dict[str, Any]:
         """Primeiras N linhas de uma tabela liberada (n limitado ao teto; passa pela allowlist)."""
         try:
-            _validar_qualificado(tabela)
             n = min(max(n, 0), s.max_rows)  # clampa: n negativo viraria LIMIT -5 (erro cru)
+            # O SQL vem do dialeto, não daqui: montar "LIMIT {n}" na mão escapava da
+            # transpilação (o injetar_limit devolve a string intocada quando n <= teto),
+            # e no SQL Server LIMIT nem existe. O dialeto também cita o nome e recusa
+            # o que não for tabela — por isso o _validar_qualificado saiu.
             return nucleo.consultar(
-                f"SELECT * FROM {tabela} LIMIT {n}", cliente=_identificar_cliente()
+                nucleo.dialeto.sql_amostra(tabela, n), cliente=_identificar_cliente()
             )
         except McpDbError as e:
             return {"erro": e.codigo, "detalhe": str(e)}
