@@ -68,11 +68,11 @@ class Nucleo:
             if not self.rl.permitir(cliente):
                 raise LimiteDeTaxa("muitas consultas — tente novamente em instantes")
             validar(sql, self.dialeto, Perfil.SOMENTE_LEITURA)  # cadeado nº 3 (a)
-            if aplicar_allowlist:
-                checar_allowlist(sql, self.s.allowlist)  # cadeado nº 3 (b)
+            if aplicar_allowlist:  # cadeado nº 3 (b)
+                checar_allowlist(sql, self.s.allowlist, self.dialeto.sqlglot_dialeto)
             # Pede uma linha a mais que o teto: se ela vier, sabemos que houve corte
             # (senão `truncado` seria sempre False quando o LIMIT é o nosso).
-            sql_limitado = injetar_limit(sql, self.s.max_rows + 1)
+            sql_limitado = injetar_limit(sql, self.s.max_rows + 1, self.dialeto.sqlglot_dialeto)
             linhas, truncado = self.db.executar(sql_limitado, self.s.max_rows)
             ms = (time.perf_counter() - t0) * 1000
             # Teto sobre o tamanho da RESPOSTA, checado depois de serializar. `max_rows` já
