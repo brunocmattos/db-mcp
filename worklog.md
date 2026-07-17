@@ -1,5 +1,45 @@
 # Worklog — db-mcp
 
+## 2026-07-16 · Manutenção — Fase 0, Task 6: o validador recebe o dialeto
+**O quê:** a sessão abriu com uma dúvida ("não sei se to abrindo na branch certa" — estava certa:
+`refactor/fase-0-multi-dialeto`) e seguiu pra **Task 6** do plano da Fase 0.   ·   **Objetivo:**
+`guardrails/sql.py` vira `validar(sql, dialeto, perfil)`, a lista de funções proibidas passa a vir
+do dialeto e `test_sql.py` fica parametrizado — com a suíte verde e **zero mudança de comportamento**.
+
+**Feito:**
+- **Task 6 fechada — commit `7c39ada`.** `validar_somente_leitura(sql)` → `validar(sql, dialeto,
+  perfil)`; o parse agora usa `dialeto.sqlglot_dialeto` (era `read="postgres"` hardcoded) e a
+  blocklist vem de `dialeto.funcs_proibidas`. `TAGS_PROIBIDAS` **ficou** no módulo, de propósito.
+  `test_sql.py` parametrizado via `_validar_pg` sobre `PG = obter_dialeto("postgres")` — é a
+  estrutura que as Fases 1 e 2 reusam (cada uma acrescenta a sua tabela de ataques; os corpora
+  **não** são compartilhados: `pg_read_file` não existe no MySQL, `load_file` não existe no Postgres).
+- **Verificação antes de executar, não depois:** medi que `FUNCS_PROIBIDAS` (sql.py) e
+  `FUNCS_PROIBIDAS_POSTGRES` (postgres.py) tinham as **mesmas 50 funções**, zero diferença nos dois
+  sentidos — só por isso remover a do módulo era seguro. Baseline `test_sql.py` = **45 testes**, e
+  45 continuam passando (se tivesse ficado verde com menos, alguém teria apagado ataque).
+  118 passed / 9 skipped, ruff + format + mypy limpos.
+- **Duas revisões, as duas passaram.** Spec: conformidade total. Qualidade: **zero Critical, nada
+  bloqueando** — mas dois achados reais, ambos armadilhas de Fase 1/2, agora no Backlog e nos
+  Gotchas (a confusão `sqlserver`/`tsql` e o `funcs_proibidas` vazio).
+- **Desvio do plano, registrado:** o implementador teve que tocar `tests/test_server.py`, que o plano
+  não previa — os fakes precisaram de `.dialeto` porque o `Nucleo.__init__` do próprio plano exige.
+  Revisado e liberado (16 testes antes e depois; usar o `DialetoPostgres` real nos fakes mantém o
+  validador idêntico ao de produção, em vez de deixá-los mais permissivos). É lacuna do plano.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção** — o projeto segue sem deployment. ⚠️ **2 commits
+locais sem push** ao fechar (`4c45c0c` da auditoria + `7c39ada` da T6) — trabalho num disco só até
+subirem. 📌 **Uma auditoria (`/portfolio-audit`) rodou em paralelo nesta mesma branch** (commit
+`4c45c0c`, 14:43) e deixou a seção `## Pendências — auditoria 2026-07-16` no `CLAUDE.md`; o item dela
+sobre `sql.py:108` **já nasceu vencido** — a T6 o corrigiu 5 minutos depois, e o item foi marcado
+como resolvido para o próximo `/abrir` não ler pendência falsa. A parte viva (`policy.py:28,77`) é
+a T7. 📌 A auditoria também nota que todo commit deste repo (o único **público**) leva o e-mail
+`@guarida.com.br` — decisão pendente do Bruno, não é bug.
+
+**Próximo:** **Task 7** — `injetar_limit` emite no dialeto alvo (`dialect="postgres"` hardcoded em
+`guardrails/policy.py` faria `TOP 9999` virar `LIMIT 1000`). Depois **T8** (`amostra` usa
+`sql_amostra`) e **T9** (introspecção por query parameters), então **T10-T12** (doctor, teste de
+fiação e2e, docs + verificação final).
+
 ## 2026-07-16 · Design + desenvolvimento — o projeto virou multi-dialeto (Fase 0, T1-T5)
 **O quê:** o projeto entrou no portfólio e recebeu o pedido de suportar **MySQL e SQL Server** além
 do PostgreSQL.   ·   **Objetivo:** decidir a arquitetura multi-dialeto, escrever spec e plano, e

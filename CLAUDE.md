@@ -6,7 +6,7 @@ no_ar: não
 atividade: ativo
 stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "sqlglot"]
 ultima_atividade: 2026-07-16
-proxima_acao: "Fase 0 · Task 6: validador recebe o dialeto"
+proxima_acao: "Fase 0 · Task 7: injetar_limit emite no dialeto alvo"
 repo: git+remote
 tags: [mcp, banco-de-dados, open-source, postgres]
 ---
@@ -14,7 +14,8 @@ tags: [mcp, banco-de-dados, open-source, postgres]
 
 ## Estado atual
 **Fase 0 em andamento — refatorar para multi-dialeto, ainda só com PostgreSQL.**
-Branch `refactor/fase-0-multi-dialeto` (**6 commits, pushada**). Tasks 1-5 feitas, **6-12 faltam**.
+Branch `refactor/fase-0-multi-dialeto` (**9 commits; os 2 últimos ainda não pushados**). Tasks 1-6
+feitas, **7-12 faltam**.
 
 - 📄 **[Spec do design multi-dialeto](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)**
   (aprovado) e **[plano da Fase 0 (12 tasks)](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md)**.
@@ -32,9 +33,9 @@ Branch `refactor/fase-0-multi-dialeto` (**6 commits, pushada**). Tasks 1-5 feita
   estética pagando com a falha que mais dói: trabalho que existe num disco só. Nada aqui tem segredo
   — os segredos moram em `.env`/`config.yaml`/`deployments/`, todos git-ignored.
 
-**Próxima ação:** **Task 6** — `guardrails/sql.py` vira `validar(sql, dialeto, perfil)`; a lista de
-funções proibidas sai do módulo e passa a vir do dialeto, e `test_sql.py` fica parametrizado por
-dialeto (é a estrutura que as Fases 1 e 2 reusam).
+**Próxima ação:** **Task 7** — `injetar_limit` (`guardrails/policy.py`) emite no dialeto alvo. Hoje
+o `dialect="postgres"` está hardcoded, o que faria um `TOP 9999` do T-SQL virar `LIMIT 1000`. É o
+primeiro dos 3 defeitos reais (T7-T9): só se manifestam no SQL Server, mas a costura é aqui.
 
 ## O que é
 Servidor MCP somente-leitura para bancos SQL. Dá a agentes de IA (Claude Desktop, Claude Code,
@@ -136,6 +137,20 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
   silêncio → teste de regressão nasce junto do dialeto (Fases 1 e 2).
 - **`OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE` passam pelo validador** com raiz `Select` — precisam
   entrar na lista do T-SQL (Fase 2).
+- 🪤 **`"sqlserver"` NÃO é nome de dialeto do sqlglot — lá se escreve `tsql`** (medido: `postgres` e
+  `mysql` o sqlglot aceita, `sqlserver` dá `ValueError: Unknown dialect`). E `"sqlserver"` é
+  exatamente a string que já está no `Literal` do `config.py:33`. O nome do produto e o do sqlglot
+  coincidem em 2 dos 3 dialetos e quebram **só** no terceiro, então quem copiar o padrão do
+  `postgres.py` (onde `nome == sqlglot_dialeto`, por coincidência) na Fase 2 escreve
+  `sqlglot_dialeto = "sqlserver"` e leva `ValueError` em toda query. O `Dialeto` tipa o campo como
+  `str` puro → o mypy não pega. Pior: o `ValueError` escapa do `except ParseError` do `validar` **e**
+  do `except McpDbError` do `server.py` → sai **sem auditoria**. Falha **fechada** (a query morre,
+  nada vaza) e é inalcançável hoje — mas é o motivo nº 1 do teste de invariante no Backlog.
+- ⚠️ **`funcs_proibidas` vazia falharia ABERTA — é o único ponto da costura nova com essa assimetria.**
+  Um dialeto stub na Fase 1 com a lista por preencher liberaria `SELECT load_file('/etc/passwd')`.
+  Contrapeso verificado: com `funcs_proibidas` vazia o `DELETE FROM t` **continua barrado** pelo
+  `TAGS_PROIBIDAS` — ou seja, manter as tags no módulo é carga estrutural, não estética: dialeto mal
+  escrito não destranca escrita. É o motivo nº 2 do teste de invariante.
 - **A allowlist é defesa em profundidade, não o limite último.** O isolamento forte tem que estar no
   banco (GRANT só nas tabelas certas). Ver `docs/DESIGN.md §5` — ele é honesto sobre o que a análise
   de SQL **não** cobre.
@@ -144,13 +159,20 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
 - [x] **Fase 0 · T1-T5 (2026-07-16):** pasta/remote → pacote `db_mcp` + comando `db-mcp` → config
   `dialeto` + `--dialect` → contrato `Dialeto` + `dialetos/postgres.py` → `db.py` delega.
   Commits `52bd464..8864f69`. **127 passed / zero skipped** contra o Postgres vivo.
-- [ ] **Fase 0 · T6 (próximo):** `validar(sql, dialeto, perfil)`; `FUNCS_PROIBIDAS` sai do módulo e
-  vem do dialeto (`TAGS_PROIBIDAS` fica — os nós são idênticos nos 3); `test_sql.py` parametrizado.
+- [x] **Fase 0 · T6 (2026-07-16):** `validar(sql, dialeto, perfil)`; `FUNCS_PROIBIDAS` saiu do módulo
+  e vem do dialeto (`TAGS_PROIBIDAS` ficou — os nós são idênticos nos 3); `test_sql.py` parametrizado.
+  Commit `7c39ada`. **45 testes em `test_sql.py` antes e depois** (nenhum ataque deixou de ser
+  barrado) · 118/9 sem banco · revisões de spec e de qualidade passaram, zero Critical.
 - [ ] **Fase 0 · T7-T9 — os 3 defeitos reais** (só se manifestam no SQL Server, mas a costura é aqui):
-  **T7** `injetar_limit` emite no dialeto alvo (`dialect="postgres"` hardcoded faria `TOP 9999` virar
-  `LIMIT 1000`) · **T8** `amostra` usa `sql_amostra` do dialeto (montava `LIMIT` na mão e escapava da
-  transpilação) · **T9** introspecção por **query parameters** (a regex `_IDENT` era de Postgres —
-  rejeitava `2fa_tokens`, aprovava `Order`; parâmetro mata a classe de injeção em vez de filtrá-la).
+  **T7 (próximo)** `injetar_limit` emite no dialeto alvo (`dialect="postgres"` hardcoded faria
+  `TOP 9999` virar `LIMIT 1000`) · **T8** `amostra` usa `sql_amostra` do dialeto (montava `LIMIT` na
+  mão e escapava da transpilação) · **T9** introspecção por **query parameters** (a regex `_IDENT` era
+  de Postgres — rejeitava `2fa_tokens`, aprovava `Order`; parâmetro mata a classe de injeção em vez
+  de filtrá-la).
+- [ ] **Teste de invariante por dialeto** (achado das revisões da T6; o remédio é um só pros dois):
+  um teste genérico em `test_dialetos.py` que **todo dialeto futuro** tenha que satisfazer —
+  (a) `sqlglot_dialeto` faz round-trip num `sqlglot.parse("SELECT 1", read=...)` e
+  (b) `funcs_proibidas` **não é vazia**. Falha no CI em vez de na query. Ver os dois gotchas novos.
 - [ ] **Fase 0 · T10-T12:** doctor delega o probe de escrita → teste de **fiação** e2e (os unitários
   provam que o validador está correto; falta provar que está **plugado**) → docs + verificação final.
 - [x] **Decidido (2026-07-16): os docs internos são públicos** — spec, plano, `CLAUDE.md` e
@@ -170,9 +192,10 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
 - [ ] `docs/03-arquitetura.md:21,35` descreve `db.py` como dono do "pool psycopg 3" —
   desatualizado desde o commit `8864f69` (T5): hoje `db.py` não importa `psycopg`, o pool vem
   de `dialetos/postgres.py`.
-- [ ] `guardrails/sql.py:108` e `guardrails/policy.py:28,77` continuam com
-  `sqlglot.parse(..., read="postgres")` / `dialect="postgres"` hardcoded — é o defeito T7 já
-  registrado no Backlog (inofensivo hoje, vira bug real na Fase 1/2).
+- [~] ~~`guardrails/sql.py:108`~~ **resolvido pela T6 no mesmo dia** (commit `7c39ada`): o
+  `read="postgres"` de `sql.py` virou `read=dialeto.sqlglot_dialeto`. **Continua de pé:**
+  `guardrails/policy.py:28,77` com `dialect="postgres"` hardcoded — é o defeito **T7**, próximo
+  da fila (a auditoria rodou minutos antes da T6 fechar).
 - [ ] `dialetos/postgres.py:154` (`sql_amostra`) existe e tem teste próprio
   (`test_dialetos.py:29`) mas não é chamado por ninguém: `server.py:179` monta
   `f"SELECT * FROM {tabela} LIMIT {n}"` na mão — confirma o defeito T8 do Backlog.
