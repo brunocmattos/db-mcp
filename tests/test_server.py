@@ -8,7 +8,6 @@ from db_mcp.errors import SomenteLeitura, SqlInvalido
 from db_mcp.server import (
     Nucleo,
     _identificar_cliente,
-    _validar_ident,
     construir_servidor,
 )
 
@@ -18,8 +17,9 @@ class FakeDB:
         self.ultimo_sql = None
         self.dialeto = obter_dialeto("postgres")
 
-    def executar(self, sql, max_rows):
+    def executar(self, sql, max_rows, params=None):
         self.ultimo_sql = sql
+        self.ultimo_params = params
         return [{"ok": 1}], False
 
 
@@ -87,7 +87,7 @@ def test_erro_do_banco_e_auditado(monkeypatch, tmp_path):
     class DBQuebrado:
         dialeto = obter_dialeto("postgres")
 
-        def executar(self, sql, max_rows):
+        def executar(self, sql, max_rows, params=None):
             raise ErroBanco("erro do banco: relation inexistente")
 
     log = tmp_path / "a.log"
@@ -104,7 +104,7 @@ def test_resultado_grande_demais_e_auditado(monkeypatch, tmp_path):
     class DBGrande:
         dialeto = obter_dialeto("postgres")
 
-        def executar(self, sql, max_rows):
+        def executar(self, sql, max_rows, params=None):
             return [{"x": "A" * 1000}], False
 
     log = tmp_path / "a.log"
@@ -135,7 +135,7 @@ def test_truncado_pelo_caminho_completo(monkeypatch, tmp_path):
     class DBTruncado:
         dialeto = obter_dialeto("postgres")
 
-        def executar(self, sql, max_rows):
+        def executar(self, sql, max_rows, params=None):
             return [{"n": 1}], True
 
     s = _settings(monkeypatch, audit_log_path=str(tmp_path / "a.log"))
@@ -143,15 +143,30 @@ def test_truncado_pelo_caminho_completo(monkeypatch, tmp_path):
     assert nucleo.consultar("SELECT 1", cliente="t")["truncado"] is True
 
 
-def test_validar_ident_aceita_nomes_validos():
-    assert _validar_ident("public") == "public"
-    assert _validar_ident("minha_tabela") == "minha_tabela"
+def test_introspeccao_nao_e_injetavel_por_nome_de_schema(monkeypatch, tmp_path):
+    # Antes: o nome ia interpolado dentro de um literal ('{schema}') e só a regex
+    # _IDENT segurava. Agora vai como parâmetro do driver — a aspa perde o poder de
+    # fechar o literal, sem depender de filtro. Este teste prova que o Nucleo repassa
+    # `params` intacto e que o payload NUNCA entra na string de SQL.
+    capturado = {}
 
+    class FakeDbParams:
+        dialeto = obter_dialeto("postgres")
 
-@pytest.mark.parametrize("mau", ["x' UNION SELECT 1", "a b", "a;b", "a'--", "", "1x"])
-def test_validar_ident_bloqueia_injecao(mau):
-    with pytest.raises(SqlInvalido):
-        _validar_ident(mau)
+        def executar(self, sql, max_rows, params=None):
+            capturado["sql"] = sql
+            capturado["params"] = params
+            return [], False
+
+    s = _settings(monkeypatch, audit_log_path=str(tmp_path / "a.log"))
+    n = Nucleo(s, db=FakeDbParams())
+    n.consultar(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
+        params=("public'; DROP TABLE x --",),
+        aplicar_allowlist=False,
+    )
+    assert capturado["params"] == ("public'; DROP TABLE x --",)
+    assert "DROP" not in capturado["sql"]
 
 
 # --- Defeito 5.2: o nome da tabela é do dialeto, não de uma regex daqui --------------
