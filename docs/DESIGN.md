@@ -37,10 +37,15 @@ Postgres, via config. Nenhuma consulta de negócio fica hardcoded; tudo passa po
 - Verificação de erros, logs de auditoria e testes automatizados.
 
 ### Não-objetivos
-- Escrita no banco (INSERT/UPDATE/DELETE/DDL): nunca.
+- Escrita no banco (INSERT/UPDATE/DELETE/DDL): fora do escopo atual. Terá spec
+  próprio. O princípio que já vale: a config da aplicação só pode **subtrair** do
+  que o usuário do banco pode fazer, nunca somar — escrita real exigirá um usuário
+  de banco com GRANT de escrita, que é passo de deployment, não linha de YAML.
 - Consultas de negócio nomeadas.
 - Múltiplos bancos numa mesma instância (1 database por instância).
-- Outros SGBDs além de PostgreSQL.
+- SGBDs além de PostgreSQL, MySQL e SQL Server. (MySQL e SQL Server chegam nas
+  fases 1 e 2; ver `superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md`.)
+- Paridade cega entre dialetos: onde o banco é mais fraco, o produto diz que é.
 
 ---
 

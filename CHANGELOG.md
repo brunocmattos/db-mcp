@@ -3,6 +3,29 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-07-20
+
+Fase 0 do design multi-dialeto: o núcleo deixa de conhecer PostgreSQL. Nenhuma
+mudança de comportamento — a suíte existente é a rede de segurança.
+
+### Changed
+- **BREAKING**: `pg-readonly-mcp` passa a se chamar `db-mcp` (pacote `db_mcp`,
+  comando `db-mcp`). Quem tinha o MCP registrado no cliente precisa reapontar.
+- Arquitetura multi-dialeto: o contrato `Dialeto` (`dialetos/base.py`, sem driver)
+  isola o que muda entre bancos — pool, cursor-dict, tradução de exceção do driver,
+  lista de funções perigosas e o probe de escrita do `doctor`. Nesta versão só o
+  dialeto `postgres` existe; MySQL e SQL Server vêm nas fases 1 e 2. O `db.py` virou
+  fachada fina e não importa mais `psycopg`.
+
+### Fixed
+- `injetar_limit` emitia sempre em sintaxe PostgreSQL. Sem efeito no dialeto
+  `postgres`; teria quebrado o SQL Server (onde `LIMIT` vira `TOP`).
+- `amostra` montava `LIMIT` na mão e escapava da transpilação; passa a vir do dialeto.
+- Introspecção passa a usar query parameters em vez de interpolar o nome de
+  schema/tabela num literal de string protegido só por regex.
+- Recusa por SQL malformado (aspa não fechada → `TokenError`) escapava do validador
+  sem virar auditoria; o `except` passou a cobrir a família `SqlglotError` inteira.
+
 ## [0.2.0] - 2026-07-10
 
 Primeira versão pública. Servidor MCP somente-leitura para qualquer PostgreSQL.

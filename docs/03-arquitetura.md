@@ -18,8 +18,8 @@ Cliente MCP / Agente  ──MCP (stdio ou HTTP+token)──▶  server.py (FastM
                                     LIMIT · teto · rate limit       (logs + auditoria)
                                                           │  só passa SQL aprovado
                                                           ▼
-                                                        db.py  (pool psycopg 3,
-                                                        transação READ ONLY + timeout)
+                                                        db.py (fachada) → dialeto
+                                                        (pool psycopg 3, READ ONLY + timeout)
                                                           │
                                                           ▼
                                                    PostgreSQL do cliente
@@ -32,7 +32,8 @@ Cliente MCP / Agente  ──MCP (stdio ou HTTP+token)──▶  server.py (FastM
 | Arquivo | Responsabilidade |
 |---|---|
 | `config.py` | Carrega `.env` (segredos) + `config.yaml` via `pydantic-settings`; valida na subida. |
-| `db.py` | Pool `psycopg` 3; toda query em transação `READ ONLY` com `statement_timeout`. |
+| `db.py` | Fachada fina de acesso ao banco; delega ao dialeto (pool, cursor-dict, tradução de erro do driver). Não importa `psycopg` — o núcleo é dialeto-agnóstico. |
+| `dialetos/` | `base.py` = contrato `Dialeto` (o `Protocol`, sem driver); `postgres.py` = pool `psycopg` 3 em transação `READ ONLY` + timeout, `DISCARD ALL` no reset, lista de funções perigosas. MySQL e SQL Server entram aqui (fases 1 e 2). |
 | `guardrails/sql.py` | Cadeado nº 3 (a): valida que é `SELECT`, uma instrução, sem funções perigosas. |
 | `guardrails/policy.py` | Allowlist de tabelas + injeção de `LIMIT`. |
 | `guardrails/ratelimit.py` | Rate limit token-bucket por cliente, thread-safe. |

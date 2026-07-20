@@ -13,6 +13,10 @@ escrever, alterar schema ou derrubar o banco.
 O código não conhece nenhum banco específico: você aponta o MCP pro seu Postgres
 preenchendo a config. Nenhum host, senha ou nome de tabela real fica no repositório.
 
+> **Estado atual:** o dialeto PostgreSQL está pronto. MySQL e SQL Server estão em
+> desenvolvimento (fases 1 e 2 do design multi-dialeto). O código já está estruturado
+> pra recebê-los, mas ainda não os suporta.
+
 ## Os três cadeados
 
 Defesa em profundidade, três camadas independentes — se uma falha, a próxima ainda segura.

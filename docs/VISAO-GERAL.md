@@ -51,7 +51,7 @@ subir servidor nem falar com um cliente MCP de verdade.
 | Peça | O que faz |
 |---|---|
 | `config.py` | Lê `.env` (segredos) e `config.yaml` (ajustes) e valida na subida — falha cedo se algo estiver errado. |
-| `db.py` | Pool de conexões; toda query roda em transação `READ ONLY` com timeout. |
+| `db.py` | Fachada fina de acesso ao banco; toda query roda em transação `READ ONLY` com timeout. O acesso específico do Postgres (pool, driver) vive num módulo de _dialeto_ à parte, pra receber MySQL e SQL Server depois. |
 | `guardrails/sql.py` | O validador: aceita só `SELECT`, uma instrução, sem DDL/escrita nem funções perigosas. |
 | `guardrails/policy.py` | A allowlist de tabelas e a injeção automática de `LIMIT`. |
 | `guardrails/ratelimit.py` | O rate limit (token-bucket), para uma rajada de queries não afogar o banco. |
@@ -114,5 +114,7 @@ passar.
 
 ## O que ele deliberadamente não faz
 
-Escrever no banco (nunca), falar com outros bancos além de PostgreSQL, ou embutir consultas de
-negócio prontas. O objetivo é ser uma ferramenta genérica e segura de leitura.
+Escrever no banco (fora do escopo atual — a escrita terá spec próprio) ou embutir consultas de
+negócio prontas. Falar com outros bancos além de PostgreSQL não é um "nunca": MySQL e SQL Server
+estão em desenvolvimento (fases 1 e 2 do design multi-dialeto); hoje só o Postgres funciona de
+verdade. O objetivo é ser uma ferramenta genérica e segura de leitura.
