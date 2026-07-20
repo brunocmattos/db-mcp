@@ -11,6 +11,8 @@ from sqlglot.errors import SqlglotError
 from ..errors import SqlInvalido
 
 if TYPE_CHECKING:
+    import psycopg  # só pra tipo: o import de runtime segue lazy dentro dos métodos
+
     from ..config import Settings
     from .base import PoolLike
 
@@ -120,7 +122,7 @@ class DialetoPostgres:
         )
 
     @staticmethod
-    def _configurar(conn: Any) -> None:
+    def _configurar(conn: psycopg.Connection[Any]) -> None:
         conn.read_only = True  # toda transação da conexão é READ ONLY
         # Não deixa o psycopg auto-preparar statements: o `DISCARD ALL` do reset apaga os
         # prepared no servidor, mas o cache do psycopg continuaria apontando pra eles, e a
@@ -128,7 +130,7 @@ class DialetoPostgres:
         conn.prepare_threshold = None
 
     @staticmethod
-    def _resetar(conn: Any) -> None:
+    def _resetar(conn: psycopg.Connection[Any]) -> None:
         # Ao devolver a conexão ao pool, zera todo o estado de sessão (GUCs mudados por
         # `set_config`, advisory locks, temp tables) pra que nada vaze de um cliente pro
         # próximo que reusar a mesma conexão física.
