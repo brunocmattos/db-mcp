@@ -47,22 +47,32 @@ class Nucleo:
         cliente: str = "stdio",
         aplicar_allowlist: bool = True,
         params: Any = None,
+        validar_sql: bool = True,
     ) -> dict[str, Any]:
         # `params` são query parameters do driver (paramstyle %s). A introspecção usa
         # isto para o nome de schema/tabela: o valor do agente vai por `params`, nunca
         # concatenado no SQL — mata a classe de injeção em vez de filtrá-la por regex.
-        # O SQL com `%s` continua parseável (medido no sqlglot 30.12): validar() e
-        # injetar_limit() rodam normalmente, então o cadeado nº 3 nunca é desligado.
+        #
+        # `validar_sql=False` é usado SÓ pela introspecção (Nucleo.introspectar): o SQL é
+        # fixo/interno e o `%s` NÃO parseia em todo dialeto (medido: mysql dá ParseError),
+        # então validar()/injetar_limit() derrubariam a introspecção. É seguro — o
+        # identificador já vai por params (zero injeção) e o fetchmany(max_rows) do executar
+        # limita as linhas sem o LIMIT. No SQL livre (tool `consultar`), fica True: o cadeado
+        # nº 3 nunca é desligado no caminho do usuário.
         t0 = time.perf_counter()
         try:
             if not self.rl.permitir(cliente):
                 raise LimiteDeTaxa("muitas consultas — tente novamente em instantes")
-            validar(sql, self.dialeto, Perfil.SOMENTE_LEITURA)  # cadeado nº 3 (a)
+            if validar_sql:
+                validar(sql, self.dialeto, Perfil.SOMENTE_LEITURA)  # cadeado nº 3 (a)
             if aplicar_allowlist:  # cadeado nº 3 (b)
                 checar_allowlist(sql, self.s.allowlist, self.dialeto.sqlglot_dialeto)
             # Pede uma linha a mais que o teto: se ela vier, sabemos que houve corte
             # (senão `truncado` seria sempre False quando o LIMIT é o nosso).
-            sql_limitado = injetar_limit(sql, self.s.max_rows + 1, self.dialeto.sqlglot_dialeto)
+            if validar_sql:
+                sql_limitado = injetar_limit(sql, self.s.max_rows + 1, self.dialeto.sqlglot_dialeto)
+            else:
+                sql_limitado = sql  # introspecção: SQL fixo, sem LIMIT (o fetchmany limita)
             linhas, truncado = self.db.executar(sql_limitado, self.s.max_rows, params)
             ms = (time.perf_counter() - t0) * 1000
             # Teto sobre o tamanho da RESPOSTA, checado depois de serializar. `max_rows` já
@@ -110,6 +120,44 @@ class Nucleo:
             raise
         return self.consultar(sql, cliente=cliente)
 
+    def introspectar(
+        self,
+        tipo: str,
+        schema: str | None = None,
+        tabela: str | None = None,
+        cliente: str = "stdio",
+    ) -> dict[str, Any]:
+        """Introspecção auditada: monta o SQL do dialeto (identificador via params) e roda
+        pelo `consultar` SEM validar (SQL fixo; o `%s` não parseia em todo dialeto).
+
+        O schema default vem do dialeto (`schema_padrao`) quando não informado. Se a
+        geração do SQL recusar (tipo inválido; ou schema != database no MySQL, Fase 1 T5),
+        o McpDbError é AUDITADO aqui antes de propagar, espelhando `amostrar`.
+        """
+        if schema is None and tipo != "schemas":
+            schema = self.dialeto.schema_padrao
+        t0 = time.perf_counter()
+        try:
+            sql, params = self.dialeto.sql_introspecao(tipo, schema=schema, tabela=tabela)
+        except McpDbError as e:
+            self.aud.registrar(
+                cliente=cliente,
+                sql=f"introspeccao(tipo={tipo!r}, schema={schema!r}, tabela={tabela!r})",
+                linhas=0,
+                ms=(time.perf_counter() - t0) * 1000,
+                veredito=e.codigo,
+            )
+            raise
+        # params=() (introspecção de schemas, sem binds) vira None: o psycopg/mysql só
+        # interpola `%` quando params é sequência, e o LIKE 'pg_%' quebraria a interpolação.
+        return self.consultar(
+            sql,
+            cliente=cliente,
+            aplicar_allowlist=False,
+            params=params or None,
+            validar_sql=False,
+        )
+
 
 def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
     # Auth só vale no transporte HTTP; o FastMCP a ignora no stdio. Sem AUTH_TOKEN,
@@ -124,19 +172,14 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
         return mcp
     nucleo = Nucleo(s)
 
-    # Introspecção: SQL fixo em information_schema → aplicar_allowlist=False
+    # Introspecção: SQL fixo do dialeto (information_schema), roda auditada pelo Nucleo
+    # SEM validar (o `%s` não parseia em todo dialeto) — o identificador vai por params.
     @mcp.tool
     def listar_schemas() -> list[dict[str, Any]]:
         """Lista os schemas do banco."""
         return cast(
             "list[dict[str, Any]]",
-            nucleo.consultar(
-                "SELECT schema_name FROM information_schema.schemata "
-                "WHERE schema_name NOT LIKE 'pg_%' AND schema_name <> 'information_schema' "
-                "ORDER BY schema_name",
-                cliente=_identificar_cliente(),
-                aplicar_allowlist=False,
-            )["linhas"],
+            nucleo.introspectar("schemas", cliente=_identificar_cliente())["linhas"],
         )
 
     @mcp.tool
@@ -144,14 +187,7 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
         """Lista as tabelas de um schema."""
         return cast(
             "list[dict[str, Any]]",
-            nucleo.consultar(
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
-                "ORDER BY table_name",
-                cliente=_identificar_cliente(),
-                aplicar_allowlist=False,
-                params=(schema,),
-            )["linhas"],
+            nucleo.introspectar("tabelas", schema=schema, cliente=_identificar_cliente())["linhas"],
         )
 
     @mcp.tool
@@ -159,13 +195,7 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
         """Lista as views de um schema."""
         return cast(
             "list[dict[str, Any]]",
-            nucleo.consultar(
-                "SELECT table_name FROM information_schema.views "
-                "WHERE table_schema = %s ORDER BY table_name",
-                cliente=_identificar_cliente(),
-                aplicar_allowlist=False,
-                params=(schema,),
-            )["linhas"],
+            nucleo.introspectar("views", schema=schema, cliente=_identificar_cliente())["linhas"],
         )
 
     @mcp.tool
@@ -173,14 +203,8 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
         """Colunas e tipos de uma tabela."""
         return cast(
             "list[dict[str, Any]]",
-            nucleo.consultar(
-                "SELECT column_name, data_type, is_nullable "
-                "FROM information_schema.columns "
-                "WHERE table_schema = %s AND table_name = %s "
-                "ORDER BY ordinal_position",
-                cliente=_identificar_cliente(),
-                aplicar_allowlist=False,
-                params=(schema, tabela),
+            nucleo.introspectar(
+                "colunas", schema=schema, tabela=tabela, cliente=_identificar_cliente()
             )["linhas"],
         )
 

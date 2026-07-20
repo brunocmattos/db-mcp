@@ -173,3 +173,38 @@ class DialetoPostgres:
 
     def sql_probe_escrita(self) -> str:
         return "CREATE TABLE __doctor_write_probe__ (n int)"
+
+    def sql_introspecao(
+        self, tipo: str, schema: str | None = None, tabela: str | None = None
+    ) -> tuple[str, tuple[Any, ...]]:
+        # SQL idêntico ao que vivia inline no server.py (T2). O nome vai por %s; a rota
+        # não valida (o %s não parseia no mysql), então nada de sqlglot aqui.
+        if tipo == "schemas":
+            return (
+                "SELECT schema_name FROM information_schema.schemata "
+                "WHERE schema_name NOT LIKE 'pg_%' AND schema_name <> 'information_schema' "
+                "ORDER BY schema_name",
+                (),
+            )
+        if tipo == "tabelas":
+            return (
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "ORDER BY table_name",
+                (schema,),
+            )
+        if tipo == "views":
+            return (
+                "SELECT table_name FROM information_schema.views "
+                "WHERE table_schema = %s ORDER BY table_name",
+                (schema,),
+            )
+        if tipo == "colunas":
+            return (
+                "SELECT column_name, data_type, is_nullable "
+                "FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s "
+                "ORDER BY ordinal_position",
+                (schema, tabela),
+            )
+        raise SqlInvalido(f"tipo de introspecção desconhecido: {tipo!r}")
