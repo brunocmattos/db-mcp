@@ -54,23 +54,23 @@ def test_rodar_excecao_vira_falha_sem_derrubar(capsys):
 
 
 def _limpar_pg(monkeypatch):
-    for k in ("PG_HOST", "PG_PORT", "PG_DBNAME", "PG_PASSWORD"):
+    for k in ("DB_HOST", "DB_PORT", "DB_DBNAME", "DB_PASSWORD"):
         monkeypatch.delenv(k, raising=False)
 
 
 def test_checar_config_ok(monkeypatch):
     _limpar_pg(monkeypatch)
-    for k, v in {"PG_HOST": "h", "PG_DBNAME": "d", "PG_PASSWORD": "p"}.items():
+    for k, v in {"DB_HOST": "h", "DB_DBNAME": "d", "DB_PASSWORD": "p"}.items():
         monkeypatch.setenv(k, v)
     ctx = Contexto(env_file=None, yaml_file="/nao/existe.yaml")
     r = checar_config(ctx)
     assert r.ok
     assert ctx.settings is not None
-    assert ctx.settings.pg_host == "h"
+    assert ctx.settings.db_host == "h"
 
 
 def test_checar_config_falta_campo_obrigatorio(monkeypatch):
-    _limpar_pg(monkeypatch)  # sem PG_HOST/PG_DBNAME/PG_PASSWORD -> ValidationError
+    _limpar_pg(monkeypatch)  # sem DB_HOST/DB_DBNAME/DB_PASSWORD -> ValidationError
     ctx = Contexto(env_file=None, yaml_file="/nao/existe.yaml")
     r = checar_config(ctx)
     assert not r.ok
@@ -84,10 +84,10 @@ def test_checar_tcp_ok(monkeypatch):
     srv.listen()
     porta = srv.getsockname()[1]
     for k, v in {
-        "PG_HOST": "127.0.0.1",
-        "PG_PORT": str(porta),
-        "PG_DBNAME": "d",
-        "PG_PASSWORD": "p",
+        "DB_HOST": "127.0.0.1",
+        "DB_PORT": str(porta),
+        "DB_DBNAME": "d",
+        "DB_PASSWORD": "p",
     }.items():
         monkeypatch.setenv(k, v)
     ctx = Contexto(env_file=None, yaml_file="/nao/existe.yaml")
@@ -102,10 +102,10 @@ def test_checar_tcp_ok(monkeypatch):
 def test_checar_tcp_recusado(monkeypatch):
     _limpar_pg(monkeypatch)
     for k, v in {
-        "PG_HOST": "127.0.0.1",
-        "PG_PORT": "1",
-        "PG_DBNAME": "d",
-        "PG_PASSWORD": "p",
+        "DB_HOST": "127.0.0.1",
+        "DB_PORT": "1",
+        "DB_DBNAME": "d",
+        "DB_PASSWORD": "p",
     }.items():
         monkeypatch.setenv(k, v)
     ctx = Contexto(env_file=None, yaml_file="/nao/existe.yaml")

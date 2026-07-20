@@ -7,10 +7,10 @@ from db_mcp.db import Database
 from db_mcp.errors import ErroBanco
 from db_mcp.server import Nucleo
 
-# Roda só quando há banco configurado: um .env na raiz OU PG_HOST no ambiente.
-_TEM_BANCO = os.path.exists(".env") or bool(os.getenv("PG_HOST"))
+# Roda só quando há banco configurado: um .env na raiz OU DB_HOST no ambiente.
+_TEM_BANCO = os.path.exists(".env") or bool(os.getenv("DB_HOST"))
 pytestmark = pytest.mark.skipif(
-    not _TEM_BANCO, reason="sem banco configurado (crie .env ou defina PG_HOST)"
+    not _TEM_BANCO, reason="sem banco configurado (crie .env ou defina DB_HOST)"
 )
 
 

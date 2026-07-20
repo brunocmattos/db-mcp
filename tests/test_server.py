@@ -24,7 +24,7 @@ class FakeDB:
 
 
 def _settings(monkeypatch, **over):
-    base = {"pg_host": "h", "pg_dbname": "d", "pg_password": "p"}
+    base = {"db_host": "h", "db_dbname": "d", "db_password": "p"}
     base.update(over)
     for k, v in base.items():
         monkeypatch.setenv(k.upper(), str(v))
@@ -275,7 +275,7 @@ def test_cli_recusa_http_sem_token(monkeypatch):
     # endpoint HTTP ficaria aberto). A checagem acontece antes de tocar no banco.
     from db_mcp import cli
 
-    for k, v in {"PG_HOST": "h", "PG_DBNAME": "d", "PG_PASSWORD": "p", "TRANSPORT": "http"}.items():
+    for k, v in {"DB_HOST": "h", "DB_DBNAME": "d", "DB_PASSWORD": "p", "TRANSPORT": "http"}.items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("AUTH_TOKEN", raising=False)
     monkeypatch.setattr("sys.argv", ["db-mcp", "--env", "/nao/existe", "run"])

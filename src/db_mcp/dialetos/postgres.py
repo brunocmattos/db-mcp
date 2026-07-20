@@ -102,12 +102,12 @@ class DialetoPostgres:
         from psycopg_pool import ConnectionPool
 
         conninfo = psycopg.conninfo.make_conninfo(
-            host=s.pg_host,
-            port=s.pg_port,
-            dbname=s.pg_dbname,
-            user=s.pg_user,
-            password=s.pg_password,
-            sslmode=s.pg_sslmode,
+            host=s.db_host,
+            port=s.db_port or 5432,  # default do dialeto Postgres quando db_port é None
+            dbname=s.db_dbname,
+            user=s.db_user,
+            password=s.db_password,
+            sslmode=s.db_sslmode,
             application_name="db-mcp",
             options=f"-c statement_timeout={s.statement_timeout_ms} "
             f"-c idle_in_transaction_session_timeout=10000",

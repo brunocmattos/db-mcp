@@ -7,7 +7,7 @@ from fastmcp import Client
 from db_mcp.cli import montar
 
 # E2E de verdade: sobe o servidor MCP e chama as ferramentas contra o banco real.
-_TEM_BANCO = os.path.exists(".env") or bool(os.getenv("PG_HOST"))
+_TEM_BANCO = os.path.exists(".env") or bool(os.getenv("DB_HOST"))
 pytestmark = pytest.mark.skipif(not _TEM_BANCO, reason="sem banco configurado")
 
 

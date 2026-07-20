@@ -110,10 +110,10 @@ jobs:
       # allowlist, auth, os caminhos que tocam o banco).
       - name: Run full test suite
         env:
-          PG_HOST: localhost
-          PG_PORT: "5432"
-          PG_DBNAME: demo
-          PG_USER: mcp_ro
-          PG_PASSWORD: mcp_ro_demo
-          PG_SSLMODE: disable
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_DBNAME: demo
+          DB_USER: mcp_ro
+          DB_PASSWORD: mcp_ro_demo
+          DB_SSLMODE: disable
         run: uv run pytest -q
