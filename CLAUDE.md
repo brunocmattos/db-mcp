@@ -5,42 +5,45 @@ produto: —
 no_ar: não
 atividade: ativo
 stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "sqlglot"]
-ultima_atividade: 2026-07-17
-proxima_acao: "Fase 0 · Task 9: introspecção por query parameters"
+ultima_atividade: 2026-07-20
+proxima_acao: "Fase 0 fechada — decisão do Bruno: push dos 5 commits + merge de main; depois Fase 1 (MySQL)"
 repo: git+remote
 tags: [mcp, banco-de-dados, open-source, postgres]
 ---
 # db-mcp
 
 ## Estado atual
-**Fase 0 em andamento — refatorar para multi-dialeto, ainda só com PostgreSQL.**
-Branch `refactor/fase-0-multi-dialeto` (**12 commits, tudo pushado**). Tasks 1-8 feitas,
-**9-12 faltam**.
+**Fase 0 CONCLUÍDA (2026-07-20) — refatoração multi-dialeto pronta, ainda só com PostgreSQL.**
+Branch `refactor/fase-0-multi-dialeto`: **19 commits à frente de `main`, 5 ainda NÃO-pushados**
+(os 4 de T9-T12 desta sessão — `bc8f901..30ebd29` — mais o de auditoria de 2026-07-17). Working
+tree limpo. As **12 tasks** do plano estão feitas.
 
 - 📄 **[Spec do design multi-dialeto](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)**
   (aprovado) e **[plano da Fase 0 (12 tasks)](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md)**.
-  Fases 1 (MySQL) e 2 (SQL Server) ganham planos próprios quando a 0 fechar.
-- ✅ **O marco da fase já caiu:** o `db.py` **não importa mais `psycopg`** — pool, cursor-dict e
-  tradução de exceção do driver vêm do contrato `Dialeto`. O núcleo ficou dialeto-agnóstico.
-  Depois da T7/T8, **nenhum dialeto cravado sobra no caminho de query** (medido).
-- 🧪 **Testes:** 132 passed / 9 skipped sem banco · **141 passed / zero skipped** com o demo Docker
-  de pé. A Fase 0 não muda comportamento: a suíte existente É a rede de segurança.
-- 🐛 **A T8 achou um defeito VIVO fora do plano** (commit `74aba49`): o `except ParseError` do
-  validador não pegava `TokenError`, então recusa por aspa não fechada vazava **sem auditoria**.
-  Ver o gotcha novo. Consertado — mas a lacuna irmã (recusa na camada de transporte) **continua
-  aberta** e está no Backlog.
-- ⚠️ **A Task 2 (rename) nunca passou pela revisão formal** — os dois revisores falharam (um deu
-  defeito, o outro bateu no limite de sessão da API). Está de pé por aprovação do Bruno + verificação
-  manual (110/9 idêntico à base, zero ocorrência do nome antigo, `docs/superpowers/` intacto).
-  Revisão retroativa está no Backlog.
-- 📖 **Spec, plano, `CLAUDE.md` e `worklog.md` são públicos, por decisão (2026-07-16).** O repo é o
-  único público do portfólio, e a alternativa (git-ignorar os docs internos) compraria arrumação
-  estética pagando com a falha que mais dói: trabalho que existe num disco só. Nada aqui tem segredo
-  — os segredos moram em `.env`/`config.yaml`/`deployments/`, todos git-ignored.
+  Fases 1 (MySQL) e 2 (SQL Server) ganham planos próprios agora que a 0 fechou.
+- ✅ **O núcleo é dialeto-agnóstico:** `db.py` **não importa `psycopg`** — pool, cursor-dict, tradução
+  de erro do driver **e o probe de escrita do doctor** (T10) vêm do contrato `Dialeto`. Os **3 defeitos
+  do spec** (5.1 policy, 5.2 amostra, 5.3 introspecção) estão corrigidos, cada um com teste de regressão.
+- 🧪 **Testes:** 126 passed / 24 skipped sem banco · **150 passed / zero skipped** com o demo Docker ·
+  `doctor` **6/6** contra o demo recriado do zero · ruff/format/mypy limpos. A Fase 0 não mudou
+  comportamento no Postgres — a suíte existente foi a rede de segurança. A **fiação e2e** (T11,
+  `tests/test_ataques_e2e.py`) prova que os guardrails estão *plugados*, não só corretos isolados.
+- 🎯 **A T9 corrigiu o plano de novo (medido):** ele mandava DESLIGAR o validador quando
+  `params is not None`, supondo que `%s` não fosse SQL parseável. Medido no sqlglot 30.12: `%s`
+  parseia, passa `validar()` e `injetar_limit()` — o **cadeado nº 3 fica LIGADO em todo caminho**.
+  A introspecção agora manda o nome por query parameter (`%s`), matando a classe de injeção; a regex
+  `_IDENT`/`_validar_ident` saiu.
+- ⚠️ **A Task 2 (rename) nunca passou pela revisão formal** — de pé por aprovação do Bruno +
+  verificação manual. Revisão retroativa segue no Backlog.
+- 📖 **Spec, plano, `CLAUDE.md` e `worklog.md` são públicos, por decisão (2026-07-16).** Nada aqui
+  tem segredo — os segredos moram em `.env`/`config.yaml`/`deployments/`, todos git-ignored.
 
-**Próxima ação:** **Task 9** — introspecção por **query parameters** (`server.py`), o último dos 3
-defeitos reais. 📌 Vale avaliar juntar com a **lacuna de auditoria das tools** (Backlog): a T9 mexe
-exatamente no `_validar_ident`, que é uma das validações que hoje recusam **sem deixar rastro**.
+**Próxima ação:** **decisão do Bruno** — push dos **5 commits** pra `origin` (repo PÚBLICO,
+outward-facing) e merge/fast-forward de `main` (19 commits atrás). Depois, **Fase 1 (MySQL)** com
+plano próprio. 📌 **Uma lacuna do Backlog sobreviveu à Fase 0:** `amostra` com nome inválido recusa
+**sem auditoria** (o `sql_amostra` levanta ANTES do `Nucleo.consultar`; a T9 fechou a irmã da
+`descrever_tabela` ao remover o `_validar_ident`, mas a do `amostra` continua). Vale fechar antes
+ou junto da Fase 1.
 
 ## O que é
 Servidor MCP somente-leitura para bancos SQL. Dá a agentes de IA (Claude Desktop, Claude Code,
@@ -66,8 +69,8 @@ docker compose down -v                   # derruba e apaga
 
 **Testes:**
 ```bash
-uv run pytest -q                         # 118 passed, 9 skipped (integração se auto-pula sem banco)
-# com banco (destrava os 9 de integração → 127 passed, zero skipped):
+uv run pytest -q                         # 126 passed, 24 skipped (integração se auto-pula sem banco)
+# com banco (destrava os de integração → 150 passed, zero skipped):
 PG_HOST=localhost PG_PORT=5433 PG_DBNAME=demo PG_USER=mcp_ro PG_PASSWORD=mcp_ro_demo uv run pytest -q
 uv run ruff check . && uv run ruff format --check . && uv run mypy src
 ```
@@ -191,30 +194,34 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
   comportamento registrada em teste:** nome de 3 partes agora passa o check (a regex barrava) e
   morre no banco — inócuo no Postgres, **decisão de segurança na Fase 2** (o SQL Server resolve
   3 partes cross-database e o `tabelas_referenciadas` ignora o catalog).
-- [ ] **Fase 0 · T9 (próximo) — o último dos 3 defeitos reais:** introspecção por **query
-  parameters** (a regex `_IDENT` é de Postgres — rejeita `2fa_tokens`, aprova `Order`; parâmetro
-  mata a classe de injeção em vez de filtrá-la). ⚠️ **O plano da T8 está errado em dois pontos** —
-  prescreve `except ParseError` (ver gotcha do `TokenError`) e um teste tautológico que só re-testa
-  o `sql_amostra` já coberto em `test_dialetos.py:29`. **Ler o plano com desconfiança na T9.**
-- [ ] 🐛 **Recusa na camada de transporte não vira auditoria — 1 de 3 sondagens deixa rastro**
-  (medido no servidor real em 2026-07-17). A auditoria só existe dentro do `Nucleo.consultar`, mas
-  a validação de entrada mora **acima** dela, nas tools: `amostra` com nome injetado devolve
-  `{"erro": "sql_invalido"}` **sem auditar**, e `descrever_tabela` com ident inválido **estoura
-  `ToolError` cru** — sem auditar e quebrando o contrato `{"erro": ...}` das irmãs. Pré-existente
-  (verificado no código anterior à T8), falha fechada, nada vaza — mas fura a propriedade que o
-  projeto declara a mais importante. **Converge com o item abaixo: um movimento resolve os dois.**
+- [x] **Fase 0 · T9 (2026-07-20) — o último dos 3 defeitos reais:** introspecção por **query
+  parameters**. Commit `bc8f901`. A regex `_IDENT`/`_validar_ident` saiu; `listar_tabelas`/
+  `listar_views`/`descrever_tabela` mandam o nome por `%s`+`params`, matando a classe de injeção.
+  **O plano estava errado (medido):** mandava **desligar o validador** quando `params is not None`,
+  supondo `%s` não-parseável — mas `%s` parseia no sqlglot 30.12, passa `validar()` e `injetar_limit()`,
+  então o cadeado nº 3 ficou **ligado em todo caminho**. −6 testes (7 da regex saíram, +1 de parâmetro).
+  Prova e2e: payload de `DROP` vai por `params`, auditoria registra `%s`; `2fa_tokens` descreve sem erro.
+- [ ] 🐛 **Recusa no `amostra` não vira auditoria** (a T9 fechou a metade irmã). Antes `amostra` **e**
+  `descrever_tabela` recusavam nome inválido sem rastro; a T9 removeu o `_validar_ident`, então
+  `descrever_tabela`/`listar_*` **não recusam mais na camada de transporte** (o nome vai por `params`).
+  **Sobra o `amostra`:** `nucleo.dialeto.sql_amostra(tabela, n)` levanta `SqlInvalido` como argumento,
+  ANTES do `nucleo.consultar`, e o `except McpDbError` do tool devolve `{"erro": ...}` **sem auditar**.
+  Pré-existente, falha fechada, nada vaza — mas fura a propriedade nº 1. Remédio: descer a lógica do
+  `amostra` pro `Nucleo` (converge com o item abaixo).
 - [ ] 🧪 **As tools MCP são intestáveis sem banco** — o `construir_servidor` não tem ponto de
   injeção (`conectar=False` retorna **antes** de registrar as tools; `conectar=True` abre conexão
   real). É por isso que o `amostra` nunca teve teste unitário. **Remédio comum com o item acima:**
   descer a lógica das tools pro `Nucleo` — que é onde auditoria e testabilidade já moram, e é o que
-  a docstring dele já promete ("independente do transporte MCP, testável isolado"). Provável
-  vizinho da T10.
+  a docstring dele já promete ("independente do transporte MCP, testável isolado"). A T10 passou
+  sem tocar nisto (foi refactor puro do doctor); vizinho natural da Fase 1 ou de um cleanup dedicado.
 - [ ] **Teste de invariante por dialeto** (achado das revisões da T6; o remédio é um só pros dois):
   um teste genérico em `test_dialetos.py` que **todo dialeto futuro** tenha que satisfazer —
   (a) `sqlglot_dialeto` faz round-trip num `sqlglot.parse("SELECT 1", read=...)` e
   (b) `funcs_proibidas` **não é vazia**. Falha no CI em vez de na query. Ver os dois gotchas novos.
-- [ ] **Fase 0 · T10-T12:** doctor delega o probe de escrita → teste de **fiação** e2e (os unitários
-  provam que o validador está correto; falta provar que está **plugado**) → docs + verificação final.
+- [x] **Fase 0 · T10-T12 (2026-07-20):** doctor delega o probe (`sql_probe_escrita`/`erros_readonly`,
+  commit `afe6812`) → fiação e2e `tests/test_ataques_e2e.py` (15 casos, `94535d0`) → docs + CHANGELOG
+  0.3.0 + verificação final (`30ebd29`). Verificação final: 150/0 com banco, 126/24 sem, doctor 6/6,
+  ruff/format/mypy limpos.
 - [x] **Decidido (2026-07-16): os docs internos são públicos** — spec, plano, `CLAUDE.md` e
   `worklog.md` versionados. Backup off-machine vale mais que arrumação estética.
 - [ ] **Revisão retroativa da Task 2** (o rename) — a formal nunca rodou.
@@ -225,36 +232,28 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
 
 ## Pendências — auditoria 2026-07-17
 ### Erros / quebrado
-- [ ] `docs/DESIGN.md:43` ainda lista "Outros SGBDs além de PostgreSQL" como não-objetivo
-  ("nunca") — contradiz a Fase 0 multi-dialeto em andamento. **Ainda não tocado** desde o
-  commit do rename (`52bd464`, 2026-07-16) — verificado de novo hoje, nenhuma mudança.
-- [ ] `docs/03-arquitetura.md:21,35` descreve `db.py` como dono do "pool psycopg 3" —
-  **ainda desatualizado** desde o commit `8864f69` (T5): hoje `db.py` não importa `psycopg`, o
-  pool vem de `dialetos/postgres.py`. Verificado de novo hoje, nenhuma mudança.
-- [ ] 🆕 **A branch `main` (a que o GitHub mostra por padrão neste repo PÚBLICO) está 14 commits
-  atrás de `refactor/fase-0-multi-dialeto`** (medido: `git rev-list --count main..refactor/...`).
-  Quem visita `github.com/brunocmattos/db-mcp` sem saber trocar de branch vê: `pyproject.toml`
-  ainda como `pg-readonly-mcp` 0.2.0, e `guardrails/sql.py:111` ainda com `except ParseError` —
-  o defeito vivo do `TokenError` (recusa sem auditoria) que a T8 corrigiu (`74aba49`) **só existe
-  corrigido na branch, não no que o repo mostra por padrão**. Sem risco de exploração hoje (nada
-  em produção), mas é a versão "oficial" pública contando uma história desatualizada. Não fixar
-  antes de T9-T12 (a Fase 0 ainda não fechou) — mas vale um merge/fast-forward de `main` quando
-  fechar, ou uma nota no README de que `main` pode ficar atrás durante a Fase 0.
-- [ ] `tests/test_ataques_e2e.py` (teste de fiação e2e do plano, T10) ainda não existe —
-  confirma T10-T12 em aberto.
-- [ ] (não é regressão, já no Backlog, revalidado hoje) `descrever_tabela`/`listar_tabelas`/
-  `listar_views` chamam `_validar_ident` **fora** do `try/except McpDbError` (`server.py`) — um
-  identificador inválido estoura `ToolError` cru, sem passar por `Nucleo.consultar`, logo **sem
-  auditoria**. Fail-closed (nada vaza), mas fura a propriedade nº 1 que o projeto declara
-  (toda recusa auditada). Confirmado lendo o código hoje — segue exatamente como o Backlog descreve.
+- [x] ✅ **Resolvido 2026-07-20 (`30ebd29`):** `docs/DESIGN.md` não-objetivos — "outros SGBDs: nunca"
+  virou "MySQL/SQL Server são fases 1 e 2"; escrita passou a "fora do escopo atual (spec próprio)".
+- [x] ✅ **Resolvido 2026-07-20 (`30ebd29`):** `docs/03-arquitetura.md` (diagrama + tabela) e
+  `docs/VISAO-GERAL.md` — `db.py` descrito como fachada fina que delega ao dialeto; nova linha de
+  `dialetos/` na tabela de componentes.
+- [ ] **A branch `main` (default do GitHub neste repo PÚBLICO) está 19 commits atrás** de
+  `refactor/fase-0-multi-dialeto` (era 14 na auditoria; +5 nesta sessão). **Agora a Fase 0 fechou**,
+  então já é seguro trazer `main` em dia — **decisão do Bruno**, junto do push dos 5 commits ainda
+  não-pushados. Enquanto não for feito, quem visita o repo sem trocar de branch vê `pg-readonly-mcp`
+  0.2.0 e o `except ParseError` já corrigido.
+- [x] ✅ **Resolvido 2026-07-20 (`94535d0`, T11):** `tests/test_ataques_e2e.py` existe — 15 casos de
+  fiação (12 ataques + SELECT legítimo + allowlist + auditoria), 15 passed com banco / 15 skipped sem.
+- [x] ✅ **Resolvido 2026-07-20 (`bc8f901`, T9) — parcial:** o `_validar_ident` foi **removido**, então
+  `descrever_tabela`/`listar_tabelas`/`listar_views` não estouram mais `ToolError` cru (o nome vai por
+  `params`). **Sobra a irmã do `amostra`** (recusa sem auditoria) — movida pro Backlog como item vivo.
 
 ### Sugestões
-- [ ] `CHANGELOG.md` para em 0.2.0 (2026-07-10); `pyproject.toml` já está em 0.3.0 e o rename +
-  Fase 0 T1-T8 aconteceram depois — vale um entry novo quando a Fase 0 fechar.
+- [x] ✅ **Resolvido 2026-07-20 (`30ebd29`):** `CHANGELOG.md` ganhou o entry `0.3.0` (rename BREAKING,
+  arquitetura multi-dialeto, os 3 defeitos + o do `TokenError`).
 - [ ] Todo commit do repo (o único público do portfólio) tem autor
   `bruno.outcore@guarida.com.br` — liga a identidade pública do GitHub ao empregador. Considerar
   `git config user.email` dedicado a este repo se a separação pessoal/Guarida importar.
-- [ ] `db.py:23-25` (docstring de `executar`) descreve `params` como o que hoje "mantém a
-  introspecção livre de injeção" — mas nenhum caller passa `params` ainda (`server.py` usa
-  `_validar_ident` + f-string). Vale marcar a docstring como aspiracional (aponta pra T9) até a
-  costura entrar.
+- [x] ✅ **Resolvido 2026-07-20 (`bc8f901`, T9):** `db.py::executar` docstring — os callers de
+  introspecção (`listar_tabelas`/`listar_views`/`descrever_tabela`) **passam `params` de verdade**
+  agora; a docstring deixou de ser aspiracional.
