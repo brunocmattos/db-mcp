@@ -1,5 +1,40 @@
 # Worklog — db-mcp
 
+## 2026-07-20 · Manutenção — Merge de main, sessões paralelas, e plano da Fase 1
+**O quê:** fechar o ciclo da Fase 0 (merge pro `main` público) e dar início à Fase 1 escrevendo o
+plano.   ·   **Objetivo:** repo público mostrando a Fase 0, lacunas fechadas, e um plano da Fase 1
+grounded pronto pra revisão.
+
+**Feito:**
+- **Merge de `main` (fast-forward `62e8c81..42d1ef4`, pushado).** O `main` estava 19 commits atrás;
+  agora `main == refactor/fase-0-multi-dialeto` e o repo público (`github.com/brunocmattos/db-mcp`)
+  mostra a Fase 0 completa por padrão — antes mostrava `pg-readonly-mcp` 0.2.0.
+- **🔀 Episódio de DUAS SESSÕES SIMULTÂNEAS.** O Bruno rodou, sem querer, uma 2ª sessão no MESMO
+  working tree. Dela veio o commit `1b59fa2` (fecha a dívida `conn: Any` do Backlog: `_configurar`/
+  `_resetar` tipados `psycopg.Connection[Any]` via `TYPE_CHECKING`), interleaved entre dois commits
+  meus. **Verificação pós-fato (a pedido do Bruno):** reflog **linear, zero reset/rebase/force**, sem
+  stashes nem branches órfãs, **sem overlap de arquivos** (ele: `postgres.py`; eu: `server.py`/
+  `dialetos/__init__.py`/docs). Rodei o estado COMBINADO: mypy limpo, 130/24 sem banco, **154/0 com
+  banco**, doctor 6/6. **Nada quebrou.** O risco real era `1b59fa2` ter ido pro `main` público sem eu
+  ter verificado — agora verificado, verde.
+- **📄 Plano da Fase 1 (MySQL) escrito — commit `7096897`.**
+  `docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md`, 10 tasks no padrão da Fase 0, **grounded
+  em 21 achados medidos** (workflow de pesquisa: sqlglot 30.12 medido + docs mysql-connector + leitura
+  do código). Decisão aprovada pelo Bruno: **config neutro `db_*`** (breaking de custo ~zero — sem PyPI
+  nem deployment). O plano ataca de frente as 4 armadilhas medidas: (1) read-only *per-checkout* (o
+  mysql-connector não tem callback como o psycopg; setar uma vez **falha aberta**); (2) `schema==database`
+  (§6 — `listar_schemas` do Postgres vazaria a instância; a recusa desce pro Nucleo, auditada);
+  (3) DDL com commit implícito no probe do doctor; (4) `--dialect` que não alcança o `doctor`.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção.** ⚠️ O plano da Fase 1 (`7096897`) está **não-pushado**
+e **aguarda revisão** do Bruno antes de executar. ⚠️ A execução da Fase 1 deve ir numa branch própria
+(`refactor/fase-1-mysql`) — o nome `fase-0` já não descreve. 📌 Lição do episódio: 2 sessões no mesmo
+diretório compartilham 1 working tree e 1 índice — conferir reflog + rodar a suíte antes de confiar.
+
+**Próximo:** Bruno revisa o plano da Fase 1; depois executar a T1 (config `db_*`) numa branch
+`refactor/fase-1-mysql`. **Ler o plano com desconfiança na execução** — os planos deste projeto erraram
+detalhes em toda fase (T7, T8, T9 na Fase 0), embora este esteja grounded em medição.
+
 ## 2026-07-20 · Manutenção — Lacunas pós-Fase-0 fechadas + caça adversarial
 **O quê:** com a Fase 0 fechada e pushada, fechar as lacunas que sobraram no Backlog antes de
 mergear `main` e começar a Fase 1.   ·   **Objetivo:** `amostra` recusa com auditoria; teste de

@@ -6,21 +6,26 @@ no_ar: não
 atividade: ativo
 stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "sqlglot"]
 ultima_atividade: 2026-07-20
-proxima_acao: "Lacunas fechadas — push + merge/ff de main; depois iniciar Fase 1 (MySQL) com plano próprio"
+proxima_acao: "Revisar o plano da Fase 1 (MySQL) e executar a T1 (config neutro db_*) — de preferência numa branch fase-1"
 repo: git+remote
 tags: [mcp, banco-de-dados, open-source, postgres]
 ---
 # db-mcp
 
 ## Estado atual
-**Fase 0 CONCLUÍDA (2026-07-20) — refatoração multi-dialeto pronta, ainda só com PostgreSQL.**
-Branch `refactor/fase-0-multi-dialeto`: **19 commits à frente de `main`, 5 ainda NÃO-pushados**
-(os 4 de T9-T12 desta sessão — `bc8f901..30ebd29` — mais o de auditoria de 2026-07-17). Working
-tree limpo. As **12 tasks** do plano estão feitas.
+**Fase 0 CONCLUÍDA e mergeada em `main` (2026-07-20). Fase 1 (MySQL) INICIADA — plano escrito,
+aguardando execução.**
+`main` == `refactor/fase-0-multi-dialeto` em `42d1ef4` (fast-forward feito e pushado — o repo público
+agora mostra a Fase 0 completa por padrão). A branch tem **+1 commit não-pushado**: o plano da Fase 1
+(`7096897`). Working tree limpo. As **12 tasks da Fase 0** estão feitas, mais as lacunas pós-fase.
+⚠️ **A execução da Fase 1 deve ganhar uma branch própria** (`refactor/fase-1-mysql`) — o nome
+`fase-0` já não descreve o trabalho.
 
 - 📄 **[Spec do design multi-dialeto](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)**
-  (aprovado) e **[plano da Fase 0 (12 tasks)](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md)**.
-  Fases 1 (MySQL) e 2 (SQL Server) ganham planos próprios agora que a 0 fechou.
+  (aprovado) · **[plano da Fase 0](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md)**
+  (feito) · **[plano da Fase 1 — MySQL](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md)**
+  (escrito 2026-07-20, grounded em 21 achados medidos, **aguardando revisão do Bruno antes de executar**).
+  Fase 2 (SQL Server) ganha plano próprio quando a 1 fechar.
 - ✅ **O núcleo é dialeto-agnóstico:** `db.py` **não importa `psycopg`** — pool, cursor-dict, tradução
   de erro do driver **e o probe de escrita do doctor** (T10) vêm do contrato `Dialeto`. Os **3 defeitos
   do spec** (5.1 policy, 5.2 amostra, 5.3 introspecção) estão corrigidos, cada um com teste de regressão.
@@ -38,13 +43,20 @@ tree limpo. As **12 tasks** do plano estão feitas.
 - 📖 **Spec, plano, `CLAUDE.md` e `worklog.md` são públicos, por decisão (2026-07-16).** Nada aqui
   tem segredo — os segredos moram em `.env`/`config.yaml`/`deployments/`, todos git-ignored.
 
-**Próxima ação:** **decisão do Bruno** — push dos commits pendentes pra `origin` (repo PÚBLICO,
-outward-facing) e merge/fast-forward de `main`. Depois, **Fase 1 (MySQL)** com plano próprio.
+**Próxima ação:** **Bruno revisar o [plano da Fase 1](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md)**;
+depois executar a **T1** (config neutro `db_*` — decisão aprovada) numa branch `refactor/fase-1-mysql`.
+As 4 armadilhas medidas que o plano ataca: read-only *per-checkout* (mysql-connector sem callback,
+falha aberta), `schema==database` (§6), DDL com commit implícito no probe do doctor, e `--dialect`
+que não alcança o `doctor`.
 ✅ **As lacunas pós-Fase-0 foram fechadas (2026-07-20):** o `amostra` recusa **com** auditoria
-(`Nucleo.amostrar`, commit `bc2a20b`) e o **teste de invariante por dialeto** entrou (`cc20676`,
-`_REGISTRO` como fonte única). Uma **caça adversarial** (3 finders + verificação) varreu o resto:
-zero recusas alcançáveis sem auditoria hoje; o único achado (gotcha nº 1, `ValueError` de
-`sqlglot_dialeto` inválido) é **inalcançável** e agora **guardado no CI pelo teste de invariante**.
+(`Nucleo.amostrar`, `bc2a20b`), o **teste de invariante por dialeto** entrou (`cc20676`), e uma
+**caça adversarial** confirmou zero recusas alcançáveis sem auditoria (o único achado, gotcha nº 1,
+é inalcançável e guardado no CI). A dívida `conn: Any` também caiu (`1b59fa2`).
+🔀 **Episódio de duas sessões simultâneas (2026-07-20):** o Bruno rodou uma 2ª sessão no mesmo
+working tree; o commit `1b59fa2` (conn: Any) veio dela, interleaved com os meus. Verificado depois:
+**nada quebrou** — histórico linear (zero reset/rebase), sem overlap de arquivos, mypy/suíte/doctor
+verdes no estado combinado. Lição: 2 sessões no mesmo diretório = 1 working tree; conferir o reflog
+e rodar a suíte antes de confiar.
 
 ## O que é
 Servidor MCP somente-leitura para bancos SQL. Dá a agentes de IA (Claude Desktop, Claude Code,
@@ -227,10 +239,13 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
 - [x] **Decidido (2026-07-16): os docs internos são públicos** — spec, plano, `CLAUDE.md` e
   `worklog.md` versionados. Backup off-machine vale mais que arrumação estética.
 - [ ] **Revisão retroativa da Task 2** (o rename) — a formal nunca rodou.
-- [ ] **Fase 1 (MySQL)** e **Fase 2 (SQL Server)** — cada uma com plano próprio, depois da 0 verde.
+- [ ] **Fase 1 (MySQL)** — **plano escrito** (`docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md`,
+  commit `7096897`), grounded em 21 achados medidos. Aguarda revisão do Bruno; executar numa branch
+  `refactor/fase-1-mysql`. **Fase 2 (SQL Server)** — plano próprio depois da 1.
 - [ ] **Escrita configurável** — spec próprio, quando chegar a hora. Ver o princípio acima.
-- [ ] Dívida menor: `conn: Any` em `dialetos/postgres.py::_configurar/_resetar` — dá pra manter
-  `psycopg.Connection` via `TYPE_CHECKING` e não perder a precisão de tipo.
+- [x] **Dívida menor `conn: Any` — resolvida (2026-07-20, `1b59fa2`, sessão paralela do Bruno):**
+  `_configurar`/`_resetar` tipados `psycopg.Connection[Any]` via `TYPE_CHECKING` (runtime segue lazy).
+  `linhas_como_dict` fica `Any` de propósito (membro do Protocol, agnóstico de driver).
 
 ## Pendências — auditoria 2026-07-17
 ### Erros / quebrado
