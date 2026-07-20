@@ -211,6 +211,53 @@ def test_sql_amostra_deixa_passar_nome_de_3_partes():
     assert d.sql_amostra("a.b.c", 10) == 'SELECT * FROM "a"."b"."c" LIMIT 10'
 
 
+# --- 🐛 amostra recusa COM auditoria (lógica descida pro Nucleo) ----------------------
+# Antes o `amostra` (tool) chamava `nucleo.consultar(nucleo.dialeto.sql_amostra(...))`: o
+# SqlInvalido do build era avaliado como ARGUMENTO, levantava ANTES do except que audita,
+# e a recusa saía sem rastro. `Nucleo.amostrar` põe o build dentro da trilha auditada — e,
+# de quebra, torna o caminho testável sem banco (era a única tool com lógica fora do Nucleo).
+
+
+def test_amostra_com_nome_invalido_e_auditada(monkeypatch, tmp_path):
+    log = tmp_path / "a.log"
+    s = _settings(monkeypatch, audit_log_path=str(log))
+    nucleo = Nucleo(s, db=FakeDB())
+
+    with pytest.raises(SqlInvalido):
+        nucleo.amostrar("t; DROP TABLE x", n=5, cliente="atacante")
+
+    registro = json.loads(log.read_text(encoding="utf-8").strip())
+    assert registro["veredito"] == "sql_invalido"
+    assert registro["cliente"] == "atacante"
+    assert "DROP" in registro["sql"]  # o nome tentado fica na trilha (valor forense)
+
+
+def test_amostra_valida_passa_pelo_caminho_completo(monkeypatch, tmp_path):
+    # Nome válido: o Nucleo monta o SQL do dialeto (aspas = assinatura do dialeto), roda o
+    # caminho completo (validar + injetar_limit) e audita "ok" via consultar.
+    log = tmp_path / "a.log"
+    s = _settings(monkeypatch, audit_log_path=str(log))
+    nucleo = Nucleo(s, db=FakeDB())
+
+    resp = nucleo.amostrar("clientes", n=3, cliente="t")
+    assert resp["linhas"] == [{"ok": 1}]
+    assert nucleo.db.ultimo_sql.startswith('SELECT * FROM "clientes"')
+    assert json.loads(log.read_text(encoding="utf-8").strip())["veredito"] == "ok"
+
+
+def test_amostra_clampa_n(monkeypatch, tmp_path):
+    # n negativo viraria `LIMIT -5` (erro cru); n gigante estouraria o teto. O clamp
+    # (movido do server pro Nucleo) segura os dois antes de o número virar SQL.
+    s = _settings(monkeypatch, audit_log_path=str(tmp_path / "a.log"))
+    nucleo = Nucleo(s, db=FakeDB())
+
+    nucleo.amostrar("clientes", n=-5, cliente="t")
+    assert "-5" not in nucleo.db.ultimo_sql
+
+    nucleo.amostrar("clientes", n=10**9, cliente="t")
+    assert "1000000000" not in nucleo.db.ultimo_sql
+
+
 def test_servidor_com_auth_token_configura_auth(monkeypatch):
     s = _settings(monkeypatch, auth_token="segredo")
     mcp = construir_servidor(s, conectar=False)

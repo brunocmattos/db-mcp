@@ -86,6 +86,30 @@ class Nucleo:
         self.aud.registrar(cliente=cliente, sql=sql, linhas=len(linhas), ms=ms, veredito="ok")
         return {"linhas": linhas, "truncado": truncado, "total": len(linhas)}
 
+    def amostrar(self, tabela: str, n: int = 10, cliente: str = "stdio") -> dict[str, Any]:
+        """Primeiras N linhas de uma tabela liberada (n clampado ao teto; passa pela allowlist).
+
+        O SQL vem do dialeto, não montado aqui: o dialeto cita o nome (identify=True) e
+        recusa o que não for uma tabela — mais estrito e sem viés de Postgres que a antiga
+        regex. Se o nome for inválido, o SqlInvalido do dialeto é AUDITADO aqui antes de
+        propagar. Antes isto vivia na tool, onde o build era avaliado como ARGUMENTO de
+        `consultar` e levantava FORA do except que audita — a recusa saía sem rastro.
+        """
+        t0 = time.perf_counter()
+        n = min(max(n, 0), self.s.max_rows)  # clampa: n negativo viraria LIMIT -5 (erro cru)
+        try:
+            sql = self.dialeto.sql_amostra(tabela, n)
+        except McpDbError as e:
+            self.aud.registrar(
+                cliente=cliente,
+                sql=f"amostra(tabela={tabela!r}, n={n})",
+                linhas=0,
+                ms=(time.perf_counter() - t0) * 1000,
+                veredito=e.codigo,
+            )
+            raise
+        return self.consultar(sql, cliente=cliente)
+
 
 def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
     # Auth só vale no transporte HTTP; o FastMCP a ignora no stdio. Sem AUTH_TOKEN,
@@ -164,14 +188,7 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
     def amostra(tabela: str, n: int = 10) -> dict[str, Any]:
         """Primeiras N linhas de uma tabela liberada (n limitado ao teto; passa pela allowlist)."""
         try:
-            n = min(max(n, 0), s.max_rows)  # clampa: n negativo viraria LIMIT -5 (erro cru)
-            # O SQL vem do dialeto, não daqui: montar "LIMIT {n}" na mão escapava da
-            # transpilação (o injetar_limit devolve a string intocada quando n <= teto),
-            # e no SQL Server LIMIT nem existe. O dialeto também cita o nome e recusa
-            # o que não for tabela — por isso o _validar_qualificado saiu.
-            return nucleo.consultar(
-                nucleo.dialeto.sql_amostra(tabela, n), cliente=_identificar_cliente()
-            )
+            return nucleo.amostrar(tabela, n, cliente=_identificar_cliente())
         except McpDbError as e:
             return {"erro": e.codigo, "detalhe": str(e)}
 
