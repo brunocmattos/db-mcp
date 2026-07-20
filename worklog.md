@@ -1,5 +1,42 @@
 # Worklog — db-mcp
 
+## 2026-07-20 · Manutenção — Lacunas pós-Fase-0 fechadas + caça adversarial
+**O quê:** com a Fase 0 fechada e pushada, fechar as lacunas que sobraram no Backlog antes de
+mergear `main` e começar a Fase 1.   ·   **Objetivo:** `amostra` recusa com auditoria; teste de
+invariante por dialeto; e confirmar que não há OUTRAS recusas sem auditoria.
+
+**Feito:**
+- **🐛 Lacuna do `amostra` fechada — commit `bc2a20b`.** A lógica desceu pro `Nucleo.amostrar`: o
+  build `sql_amostra` (que levantava `SqlInvalido` como argumento, ANTES do `Nucleo.consultar`, e
+  saía sem trilha) agora roda DENTRO da trilha auditada. Nome inválido audita `veredito=sql_invalido`
+  com o nome tentado (valor forense) e re-levanta; a tool traduz pra `{"erro": ...}`. **Provado e2e
+  contra o demo:** 2/2 sondagens auditam (antes 1/2). De quebra, o `amostra` — única tool com lógica
+  fora do Nucleo — ficou testável sem banco. +3 testes unitários.
+- **🧪 Teste de invariante por dialeto — commit `cc20676`.** `dialetos/__init__.py` ganhou um
+  `_REGISTRO` de fábricas lazy como **fonte única**; `DIALETOS_IMPLEMENTADOS` deriva dele e
+  parametriza o `test_invariante_todo_dialeto`, que exige de TODO dialeto futuro: (a) `sqlglot_dialeto`
+  faz round-trip real (pega `"sqlserver"` no lugar de `"tsql"`) e (b) `funcs_proibidas` não-vazia.
+  Fecha no CI os dois gotchas nº 1 e nº 2 do CLAUDE.md.
+- **🔍 Caça adversarial (workflow, 3 finders + verificação que refuta):** 7 candidatos → **1
+  confirmado, 1 já-corrigido, 5 refutados**. O confirmado é o gotcha nº 1 (`ValueError` de
+  `sqlglot_dialeto` inválido escapa do `except SqlglotError`/`except McpDbError`) — mas **inalcançável
+  hoje** (só `postgres` resolve, `sqlglot_dialeto='postgres'` é válido; nome errado derruba o servidor
+  no boot) e **agora guardado no CI** pelo teste de invariante acima. Refutados verificados: o
+  `PoolTimeout` foi MEDIDO tendo `psycopg.Error` na MRO (é embrulhado e auditado); `json.dumps` não é
+  recusa (McpDbError); a camada de tool está limpa (T9 + amostra). **Zero recusas alcançáveis sem
+  auditoria hoje.**
+- **Decisão registrada:** **não** embrulhar `ValueError` no `validar()` — rotularia erro de config
+  como recusa `SqlInvalido` do usuário (arquiteturalmente errado) e violaria YAGNI. O teste de
+  invariante é o guard certo, na camada certa (CI).
+- **Verificação:** 130/24 sem banco · **154/0 com o demo** · ruff/format/mypy limpos.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção.** ⚠️ Commits pendentes de push/merge (`bc2a20b`,
+`cc20676` + este de docs) — decisão do Bruno; repo PÚBLICO. Sem lacuna de auditoria alcançável
+conhecida.
+
+**Próximo:** push + merge/ff de `main` (autorizado). Depois **Fase 1 (MySQL)** com plano próprio —
+**ler o plano com desconfiança** (o da Fase 0 errou em T7, T8 e T9).
+
 ## 2026-07-20 · Manutenção — Fase 0 FECHADA (T9→T12)
 **O quê:** a sessão abriu perguntando o que faltava pra concluir a Fase 0 e seguiu executando as
 **4 tasks finais** (T9, T10, T11, T12).   ·   **Objetivo:** fechar a Fase 0 multi-dialeto com a
