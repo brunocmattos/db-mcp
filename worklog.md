@@ -1,5 +1,46 @@
 # Worklog — db-mcp
 
+## 2026-07-20 · Manutenção — Fase 0 FECHADA (T9→T12)
+**O quê:** a sessão abriu perguntando o que faltava pra concluir a Fase 0 e seguiu executando as
+**4 tasks finais** (T9, T10, T11, T12).   ·   **Objetivo:** fechar a Fase 0 multi-dialeto com a
+suíte verde, zero mudança de comportamento no Postgres, e a Definição de Pronto batida.
+
+**Feito:**
+- **T9 — commit `bc8f901`.** Introspecção por **query parameters**. `listar_tabelas`/`listar_views`/
+  `descrever_tabela` passaram a mandar o nome por `%s`+`params`; a regex `_IDENT`/`_validar_ident`
+  saiu. TDD: RED visto falhar (`unexpected keyword argument 'params'`) → GREEN. **O plano errou de
+  novo, e foi medido, não contornado:** ele mandava DESLIGAR o validador quando `params is not None`,
+  supondo `%s` não-parseável — mas medi no sqlglot 30.12 que `%s` parseia, passa `validar()` e
+  `injetar_limit()`, então o cadeado nº 3 ficou **ligado em todo caminho** (a versão do plano abriria
+  um buraco de segurança à toa). −6 testes (7 da regex saíram, +1 de parâmetro). Prova e2e dirigida:
+  payload `public'; DROP TABLE clientes --` → `[]` sem crash, auditoria registra `%s` (não o payload),
+  `2fa_tokens` descreve sem `SqlInvalido`.
+- **T10 — commit `afe6812`.** `doctor.checar_somente_leitura` delega `sql_probe_escrita()` e
+  `erros_readonly` ao dialeto (a costura já existia no contrato). Refactor sem mudança de
+  comportamento: doctor 6/6 com `write recusado: 25006 ReadOnlySqlTransaction` idêntico. `import
+  psycopg` fica (o `checar_auth` ainda usa).
+- **T11 — commit `94535d0`.** `tests/test_ataques_e2e.py`: 15 casos que provam que os guardrails
+  estão **plugados** no caminho `Nucleo.consultar → guardrails → pool → banco` (os unitários provam
+  correção; estes provam fiação). 15 passed com banco, 15 skipped sem.
+- **T12 — commit `30ebd29`.** Docs sincronizados com honestidade: `DESIGN.md`/`VISAO-GERAL.md`
+  não-objetivos (SGBDs não são "nunca", são fases 1 e 2); `03-arquitetura.md`/`VISAO-GERAL.md`
+  (`db.py` virou fachada, pool vem do dialeto); README com nota de estado atual **sem** a tabela de
+  cadeados por dialeto (documentar capacidade inexistente seria mentira); `CHANGELOG.md` entry 0.3.0.
+- **Verificação final da fase (demo recriado do zero):** ruff/format/mypy limpos · 126/24 sem banco ·
+  **150/0 com banco** · **doctor 6/6**. Definição de Pronto batida: os 3 defeitos com teste de
+  regressão, `dialetos/base.py` sem driver, zero funcionalidade nova, nome antigo só em refs históricas.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção** — sem deployment, só o demo Docker. ⚠️ **5 commits
+NÃO-pushados** (T9-T12 + o de auditoria de 17/07) num repo **PÚBLICO**; push e merge de `main` (19
+commits atrás) são **decisão do Bruno**, deixados pendentes de propósito (outward-facing). 🐛 **Lacuna
+viva no Backlog:** `amostra` com nome inválido recusa **sem auditoria** (o `sql_amostra` levanta antes
+do `Nucleo.consultar`); a T9 fechou a irmã da `descrever_tabela` ao remover o `_validar_ident`, mas a
+do `amostra` sobrou. Falha fechada, nada vaza. 📌 O container `db-mcp-demo` ficou **de pé**.
+
+**Próximo:** **decisão do Bruno** — push dos 5 commits + merge/fast-forward de `main`. Depois **Fase 1
+(MySQL)** com plano próprio (ou fechar antes a lacuna do `amostra` + o teste de invariante por dialeto,
+ambos no Backlog). E **ler o plano da Fase 1 com desconfiança** — o da Fase 0 errou em T7, T8 e T9.
+
 ## 2026-07-17 · Manutenção — Fase 0, T7 e T8 (e um defeito vivo que não estava no plano)
 **O quê:** a sessão abriu para a **Task 7** e emendou a **Task 8**.   ·   **Objetivo:** os defeitos
 5.1 e 5.2 do spec — `policy.py` e `amostra` param de cravar Postgres — com a suíte verde e **zero
