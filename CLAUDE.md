@@ -6,7 +6,7 @@ no_ar: não
 atividade: ativo
 stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "sqlglot"]
 ultima_atividade: 2026-07-20
-proxima_acao: "Fase 0 fechada — decisão do Bruno: push dos 5 commits + merge de main; depois Fase 1 (MySQL)"
+proxima_acao: "Lacunas fechadas — push + merge/ff de main; depois iniciar Fase 1 (MySQL) com plano próprio"
 repo: git+remote
 tags: [mcp, banco-de-dados, open-source, postgres]
 ---
@@ -24,7 +24,7 @@ tree limpo. As **12 tasks** do plano estão feitas.
 - ✅ **O núcleo é dialeto-agnóstico:** `db.py` **não importa `psycopg`** — pool, cursor-dict, tradução
   de erro do driver **e o probe de escrita do doctor** (T10) vêm do contrato `Dialeto`. Os **3 defeitos
   do spec** (5.1 policy, 5.2 amostra, 5.3 introspecção) estão corrigidos, cada um com teste de regressão.
-- 🧪 **Testes:** 126 passed / 24 skipped sem banco · **150 passed / zero skipped** com o demo Docker ·
+- 🧪 **Testes:** 130 passed / 24 skipped sem banco · **154 passed / zero skipped** com o demo Docker ·
   `doctor` **6/6** contra o demo recriado do zero · ruff/format/mypy limpos. A Fase 0 não mudou
   comportamento no Postgres — a suíte existente foi a rede de segurança. A **fiação e2e** (T11,
   `tests/test_ataques_e2e.py`) prova que os guardrails estão *plugados*, não só corretos isolados.
@@ -38,12 +38,13 @@ tree limpo. As **12 tasks** do plano estão feitas.
 - 📖 **Spec, plano, `CLAUDE.md` e `worklog.md` são públicos, por decisão (2026-07-16).** Nada aqui
   tem segredo — os segredos moram em `.env`/`config.yaml`/`deployments/`, todos git-ignored.
 
-**Próxima ação:** **decisão do Bruno** — push dos **5 commits** pra `origin` (repo PÚBLICO,
-outward-facing) e merge/fast-forward de `main` (19 commits atrás). Depois, **Fase 1 (MySQL)** com
-plano próprio. 📌 **Uma lacuna do Backlog sobreviveu à Fase 0:** `amostra` com nome inválido recusa
-**sem auditoria** (o `sql_amostra` levanta ANTES do `Nucleo.consultar`; a T9 fechou a irmã da
-`descrever_tabela` ao remover o `_validar_ident`, mas a do `amostra` continua). Vale fechar antes
-ou junto da Fase 1.
+**Próxima ação:** **decisão do Bruno** — push dos commits pendentes pra `origin` (repo PÚBLICO,
+outward-facing) e merge/fast-forward de `main`. Depois, **Fase 1 (MySQL)** com plano próprio.
+✅ **As lacunas pós-Fase-0 foram fechadas (2026-07-20):** o `amostra` recusa **com** auditoria
+(`Nucleo.amostrar`, commit `bc2a20b`) e o **teste de invariante por dialeto** entrou (`cc20676`,
+`_REGISTRO` como fonte única). Uma **caça adversarial** (3 finders + verificação) varreu o resto:
+zero recusas alcançáveis sem auditoria hoje; o único achado (gotcha nº 1, `ValueError` de
+`sqlglot_dialeto` inválido) é **inalcançável** e agora **guardado no CI pelo teste de invariante**.
 
 ## O que é
 Servidor MCP somente-leitura para bancos SQL. Dá a agentes de IA (Claude Desktop, Claude Code,
@@ -153,8 +154,11 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
   `sqlglot_dialeto = "sqlserver"` e leva `ValueError` em toda query. O `Dialeto` tipa o campo como
   `str` puro → o mypy não pega. Pior: o `ValueError` escapa do `except SqlglotError` do `validar`
   (ele não é da família do sqlglot) **e** do `except McpDbError` do `server.py` → sai **sem
-  auditoria**. Falha **fechada** (a query morre, nada vaza) e é inalcançável hoje — mas é o motivo
-  nº 1 do teste de invariante no Backlog.
+  auditoria**. Falha **fechada** (a query morre, nada vaza) e é inalcançável hoje. ✅ **Agora guardado
+  no CI** pelo `test_invariante_todo_dialeto` (`cc20676`), que faz round-trip do `sqlglot_dialeto` e
+  falha se um dialeto novo cravar `"sqlserver"` — o `ValueError` morre no CI, não numa query. (Caça
+  adversarial de 2026-07-20 reconfirmou o mecanismo aberto estruturalmente mas inalcançável; decidido
+  **não** embrulhar `ValueError` no `validar` — seria rotular erro de config como recusa do usuário.)
 - 🪤 **`TokenError` NÃO é subclasse de `ParseError` — são irmãs sob `SqlglotError`** (medido). Quando
   o **tokenizer** morre antes do parser (aspa nunca fechada), o sqlglot levanta `TokenError`. Um
   `except ParseError` — que era o código até 2026-07-17 e o que o **plano ainda prescreve na T8** —
@@ -166,7 +170,8 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
   Um dialeto stub na Fase 1 com a lista por preencher liberaria `SELECT load_file('/etc/passwd')`.
   Contrapeso verificado: com `funcs_proibidas` vazia o `DELETE FROM t` **continua barrado** pelo
   `TAGS_PROIBIDAS` — ou seja, manter as tags no módulo é carga estrutural, não estética: dialeto mal
-  escrito não destranca escrita. É o motivo nº 2 do teste de invariante.
+  escrito não destranca escrita. ✅ **Agora guardado no CI** pelo `test_invariante_todo_dialeto`
+  (`cc20676`), que exige `funcs_proibidas` não-vazia pra todo dialeto de `DIALETOS_IMPLEMENTADOS`.
 - **A allowlist é defesa em profundidade, não o limite último.** O isolamento forte tem que estar no
   banco (GRANT só nas tabelas certas). Ver `docs/DESIGN.md §5` — ele é honesto sobre o que a análise
   de SQL **não** cobre.
@@ -201,23 +206,20 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
   supondo `%s` não-parseável — mas `%s` parseia no sqlglot 30.12, passa `validar()` e `injetar_limit()`,
   então o cadeado nº 3 ficou **ligado em todo caminho**. −6 testes (7 da regex saíram, +1 de parâmetro).
   Prova e2e: payload de `DROP` vai por `params`, auditoria registra `%s`; `2fa_tokens` descreve sem erro.
-- [ ] 🐛 **Recusa no `amostra` não vira auditoria** (a T9 fechou a metade irmã). Antes `amostra` **e**
-  `descrever_tabela` recusavam nome inválido sem rastro; a T9 removeu o `_validar_ident`, então
-  `descrever_tabela`/`listar_*` **não recusam mais na camada de transporte** (o nome vai por `params`).
-  **Sobra o `amostra`:** `nucleo.dialeto.sql_amostra(tabela, n)` levanta `SqlInvalido` como argumento,
-  ANTES do `nucleo.consultar`, e o `except McpDbError` do tool devolve `{"erro": ...}` **sem auditar**.
-  Pré-existente, falha fechada, nada vaza — mas fura a propriedade nº 1. Remédio: descer a lógica do
-  `amostra` pro `Nucleo` (converge com o item abaixo).
-- [ ] 🧪 **As tools MCP são intestáveis sem banco** — o `construir_servidor` não tem ponto de
-  injeção (`conectar=False` retorna **antes** de registrar as tools; `conectar=True` abre conexão
-  real). É por isso que o `amostra` nunca teve teste unitário. **Remédio comum com o item acima:**
-  descer a lógica das tools pro `Nucleo` — que é onde auditoria e testabilidade já moram, e é o que
-  a docstring dele já promete ("independente do transporte MCP, testável isolado"). A T10 passou
-  sem tocar nisto (foi refactor puro do doctor); vizinho natural da Fase 1 ou de um cleanup dedicado.
-- [ ] **Teste de invariante por dialeto** (achado das revisões da T6; o remédio é um só pros dois):
-  um teste genérico em `test_dialetos.py` que **todo dialeto futuro** tenha que satisfazer —
-  (a) `sqlglot_dialeto` faz round-trip num `sqlglot.parse("SELECT 1", read=...)` e
-  (b) `funcs_proibidas` **não é vazia**. Falha no CI em vez de na query. Ver os dois gotchas novos.
+- [x] 🐛 **Recusa no `amostra` agora vira auditoria (2026-07-20, `bc2a20b`).** A lógica desceu pro
+  `Nucleo.amostrar`: o build `sql_amostra` roda DENTRO da trilha auditada, então nome inválido audita
+  `veredito=sql_invalido` (com o nome tentado na trilha, valor forense) e re-levanta; a tool traduz
+  pra `{"erro": ...}`. Provado e2e: 2/2 sondagens auditam (antes, 1/2). +3 testes unitários.
+- [x] 🧪 **Testabilidade das tools — resolvido pra onde importa (2026-07-20, `bc2a20b`).** A única
+  tool com lógica fora do `Nucleo` era o `amostra`; ela desceu pro `Nucleo.amostrar` (testável sem
+  banco — 3 testes novos). Os wrappers `@mcp.tool` ainda não têm ponto de injeção no
+  `construir_servidor`, mas isso virou **cosmético**: toda a lógica auditável/testável mora no
+  `Nucleo`, e a fiação tool→Nucleo é coberta pelo e2e (`test_e2e_integration.py`).
+- [x] **Teste de invariante por dialeto (2026-07-20, `cc20676`).** `test_invariante_todo_dialeto`
+  parametrizado por `DIALETOS_IMPLEMENTADOS` (derivado do `_REGISTRO`, a nova **fonte única** em
+  `dialetos/__init__.py`): (a) `sqlglot_dialeto` faz round-trip real (pega `"sqlserver"` no lugar de
+  `"tsql"` → `ValueError: Unknown dialect`) e (b) `funcs_proibidas` não-vazia. **Quem acrescentar um
+  dialeto na Fase 1/2 não escapa do gate** — falha no CI, não numa query. Fecha os dois gotchas abaixo.
 - [x] **Fase 0 · T10-T12 (2026-07-20):** doctor delega o probe (`sql_probe_escrita`/`erros_readonly`,
   commit `afe6812`) → fiação e2e `tests/test_ataques_e2e.py` (15 casos, `94535d0`) → docs + CHANGELOG
   0.3.0 + verificação final (`30ebd29`). Verificação final: 150/0 com banco, 126/24 sem, doctor 6/6,
