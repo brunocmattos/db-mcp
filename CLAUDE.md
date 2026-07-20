@@ -6,7 +6,7 @@ no_ar: não
 atividade: ativo
 stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "sqlglot"]
 ultima_atividade: 2026-07-20
-proxima_acao: "Revisar o plano da Fase 1 (MySQL) e executar a T1 (config neutro db_*) — de preferência numa branch fase-1"
+proxima_acao: "Executar a Fase 1 (MySQL) na branch refactor/fase-1-mysql — T1 (config neutro db_*) em diante; plano já revisado e corrigido"
 repo: git+remote
 tags: [mcp, banco-de-dados, open-source, postgres]
 ---
@@ -15,17 +15,20 @@ tags: [mcp, banco-de-dados, open-source, postgres]
 ## Estado atual
 **Fase 0 CONCLUÍDA e mergeada em `main` (2026-07-20). Fase 1 (MySQL) INICIADA — plano escrito,
 aguardando execução.**
-`main` == `refactor/fase-0-multi-dialeto` em `42d1ef4` (fast-forward feito e pushado — o repo público
-agora mostra a Fase 0 completa por padrão). A branch tem **+1 commit não-pushado**: o plano da Fase 1
-(`7096897`). Working tree limpo. As **12 tasks da Fase 0** estão feitas, mais as lacunas pós-fase.
+`main` e `refactor/fase-0-multi-dialeto` estão **em sincronia** (Fase 0 + plano da Fase 1, pushados;
+working tree limpo). O repo público mostra a Fase 0 completa **e o plano da Fase 1** por padrão. O plano
+da Fase 1 foi **revisado e corrigido nesta sessão** (2026-07-20): a revisão mediu que o `%s` **não
+parseia** no dialeto `mysql` — a introspecção quebraria ao validar o SQL com `%s`; a T2 foi patchada pra
+não rodar `validar`/`injetar_limit` na rota de introspecção. As **12 tasks da Fase 0** estão feitas, mais
+as lacunas pós-fase.
 ⚠️ **A execução da Fase 1 deve ganhar uma branch própria** (`refactor/fase-1-mysql`) — o nome
 `fase-0` já não descreve o trabalho.
 
 - 📄 **[Spec do design multi-dialeto](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)**
   (aprovado) · **[plano da Fase 0](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md)**
   (feito) · **[plano da Fase 1 — MySQL](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md)**
-  (escrito 2026-07-20, grounded em 21 achados medidos, **aguardando revisão do Bruno antes de executar**).
-  Fase 2 (SQL Server) ganha plano próprio quando a 1 fechar.
+  (escrito 2026-07-20, grounded em 21 achados medidos, **revisado e corrigido em 2026-07-20** — a
+  revisão mediu o Achado #1 do `%s` e patchou a T2). Fase 2 (SQL Server) ganha plano próprio quando a 1 fechar.
 - ✅ **O núcleo é dialeto-agnóstico:** `db.py` **não importa `psycopg`** — pool, cursor-dict, tradução
   de erro do driver **e o probe de escrita do doctor** (T10) vêm do contrato `Dialeto`. Os **3 defeitos
   do spec** (5.1 policy, 5.2 amostra, 5.3 introspecção) estão corrigidos, cada um com teste de regressão.
@@ -43,8 +46,9 @@ agora mostra a Fase 0 completa por padrão). A branch tem **+1 commit não-pusha
 - 📖 **Spec, plano, `CLAUDE.md` e `worklog.md` são públicos, por decisão (2026-07-16).** Nada aqui
   tem segredo — os segredos moram em `.env`/`config.yaml`/`deployments/`, todos git-ignored.
 
-**Próxima ação:** **Bruno revisar o [plano da Fase 1](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md)**;
-depois executar a **T1** (config neutro `db_*` — decisão aprovada) numa branch `refactor/fase-1-mysql`.
+**Próxima ação:** executar a **T1** (config neutro `db_*` — decisão aprovada) na branch `refactor/fase-1-mysql`.
+O [plano da Fase 1](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md) já foi **revisado e corrigido**
+(2026-07-20 — Achado #1 do `%s` na introspecção, T2 patchada).
 As 4 armadilhas medidas que o plano ataca: read-only *per-checkout* (mysql-connector sem callback,
 falha aberta), `schema==database` (§6), DDL com commit implícito no probe do doctor, e `--dialect`
 que não alcança o `doctor`.
@@ -254,11 +258,10 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
 - [x] ✅ **Resolvido 2026-07-20 (`30ebd29`):** `docs/03-arquitetura.md` (diagrama + tabela) e
   `docs/VISAO-GERAL.md` — `db.py` descrito como fachada fina que delega ao dialeto; nova linha de
   `dialetos/` na tabela de componentes.
-- [ ] **A branch `main` (default do GitHub neste repo PÚBLICO) está 19 commits atrás** de
-  `refactor/fase-0-multi-dialeto` (era 14 na auditoria; +5 nesta sessão). **Agora a Fase 0 fechou**,
-  então já é seguro trazer `main` em dia — **decisão do Bruno**, junto do push dos 5 commits ainda
-  não-pushados. Enquanto não for feito, quem visita o repo sem trocar de branch vê `pg-readonly-mcp`
-  0.2.0 e o `except ParseError` já corrigido.
+- [x] ✅ **Resolvido 2026-07-20:** `main` (default do GitHub, repo PÚBLICO) trazido em dia — ff pra
+  `refactor/fase-0-multi-dialeto` (Fase 0 + plano da Fase 1 + esta correção de docs), pushado. O repo
+  público mostra a Fase 0 completa **e o plano da Fase 1** por padrão (antes mostrava `pg-readonly-mcp`
+  0.2.0). Decisão aprovada pelo Bruno na sessão de 2026-07-20.
 - [x] ✅ **Resolvido 2026-07-20 (`94535d0`, T11):** `tests/test_ataques_e2e.py` existe — 15 casos de
   fiação (12 ataques + SELECT legítimo + allowlist + auditoria), 15 passed com banco / 15 skipped sem.
 - [x] ✅ **Resolvido 2026-07-20 (`bc8f901`, T9) — parcial:** o `_validar_ident` foi **removido**, então

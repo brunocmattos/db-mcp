@@ -26,6 +26,11 @@ Uma pesquisa de 4 dimensões mediu o sqlglot 30.12 e leu o código/docs. Os fato
 - ✅ **`sql_amostra` copia a forma do Postgres** trocando `dialect="mysql"` (medido): `identify=True`
   cita com **crases** (`` `2fa_tokens` ``, `` `Order` ``, `` `schema`.`tab` ``) — mata a injeção e a
   crase é a **assinatura** do dialeto na auditoria. `injetar_limit` é trivial (MySQL tem `LIMIT` nativo).
+- 🔴 **O `%s` NÃO parseia no dialeto `mysql`** (medido 2026-07-20, sqlglot 30.12 — ao contrário do
+  Postgres): `WHERE x = %s` vira `exp.Mod` e dá `ParseError`. A T9 manteve `validar()`/`injetar_limit()`
+  LIGADOS na introspecção porque *"`%s` parseia"* — verdade **só no Postgres**. No MySQL, validar o SQL
+  de introspecção (que carrega `%s`) o faz **falhar fechado** → a introspecção quebraria. Corrigido na
+  T2 (a rota de introspecção deixa de validar — o identificador já vai por `params`, zero injeção).
 - 🔴 **`INTO OUTFILE`/`INTO DUMPFILE` só falham fechado por `ParseError`** (medido — acidente do
   parser, não tag). → **teste de regressão nasce junto** (um upgrade do sqlglot que os parseie abre
   o buraco em silêncio).
@@ -102,12 +107,22 @@ Postgres-only, **comportamento idêntico**. Fecha 2 itens do Backlog e prepara o
 - [ ] **Step 2 (Nucleo):** descer a lógica das tools pro `Nucleo` — ex. `Nucleo.introspectar(tipo, **kw)`
   que resolve o **schema default** (`"public"` no Postgres; será `s.db_dbname` no MySQL — ver T5),
   monta o SQL do dialeto **dentro de um `try/except McpDbError` que AUDITA** (espelhando `amostrar`),
-  e chama `consultar(..., aplicar_allowlist=False)`. As tools viram uma linha que delega.
+  e chama `consultar`. 🔴 **A rota de introspecção NÃO roda `validar`/`injetar_limit`** (Achado da
+  revisão 2026-07-20, medido): o `%s` não parseia no `mysql` e derrubaria toda a introspecção. Concreto:
+  `consultar` ganha `validar_sql: bool = True` que porteia **tanto** `validar()` **quanto** `injetar_limit()`;
+  a introspecção chama `consultar(..., aplicar_allowlist=False, validar_sql=False)`. **É seguro e
+  Postgres-neutro:** o SQL é fixo/interno, o identificador vai por `params` (o `validar` nunca viu o
+  valor — só via `%s`), o teto de linhas segue imposto pelo `fetchmany(max_rows)` do `executar` (o
+  `LIMIT` era redundante), e o `sql` auditado já era o pré-`injetar_limit`. Rate-limit, teto de bytes e
+  auditoria continuam. As tools viram uma linha que delega.
 - [ ] **Step 3 (testes):** os testes das tools de introspecção que hoje precisam de banco ganham
   companhia unitária via `Nucleo.introspectar` com `FakeDB` (agora testável sem banco — o item do
   Backlog). Provar que um raise na geração de SQL **audita** (como `test_amostra_com_nome_invalido_e_auditada`).
-- [ ] **Step 4:** suíte verde sem/com banco; a fiação e2e (`test_e2e_integration.py`) ainda passa
-  (o SQL emitido é idêntico). Commit: `refactor(server): introspeccao desce pro Nucleo + sql_introspecao no dialeto`.
+- [ ] **Step 4:** suíte verde sem/com banco; a fiação e2e (`test_e2e_integration.py`) ainda passa.
+  ⚠️ O `sql` **auditado** e as **linhas** continuam idênticos; o que muda é que a introspecção deixa de
+  anexar o `LIMIT` redundante (o `fetchmany` já limita) — se algum teste afirmar o SQL executado *com*
+  LIMIT na introspecção, ele muda de expectativa e precisa ser ajustado junto. Commit:
+  `refactor(server): introspeccao desce pro Nucleo + sql_introspecao no dialeto`.
 
 Acréscimo: **~3-4 testes** (introspecção auditada + testável sem banco).
 
@@ -164,12 +179,21 @@ O coração da fase. `DialetoMySQL` implementa **todo** o contrato (agora amplia
 
 - [ ] **Step 1:** `nome="mysql"`, `sqlglot_dialeto="mysql"`,
   `funcs_proibidas=frozenset({"load_file","sleep","benchmark","sys_exec","sys_eval"})` (minúsculas).
+  ⚠️ **A lista é escolhida, não medida-completa** (revisão 2026-07-20): medido que `get_lock` (função
+  **padrão**, vetor de lock/DoS) também vira `exp.Anonymous` e passaria; já `sys_exec`/`sys_eval` são
+  UDFs **não-padrão** (`lib_mysqludf_sys`, quase nunca presentes). Reavaliar contra o spec §5.4 —
+  incluir `get_lock`/`release_lock`/`sleep`-family se o spec concordar. (Defesa em profundidade: o limite
+  real é o `GRANT SELECT`, mas a blocklist não deveria omitir uma função padrão barrável.)
   `schema_padrao` — ⚠️ **não é estático:** no MySQL o "schema padrão" é o **database configurado**.
   Resolver no `Nucleo` (T2) lendo `s.db_dbname`, ou expor `schema_padrao_de(s)` no dialeto. Decidir
   medindo o que fica mais limpo.
 - [ ] **Step 2 (pool adapter):** `criar_pool(s)` devolve uma **classe adaptadora** (o `PoolLike` do
   contrato exige `.connection()` context manager; o `MySQLConnectionPool` cru só tem
-  `get_connection()`/`close()`). O adaptador:
+  `get_connection()`/`close()`). 🔬 **Antes de codar o adaptador, MEDIR:** `uv sync --extra mysql` e
+  confirmar empiricamente que `pool_reset_session=True` de fato zera o `SET SESSION TRANSACTION READ ONLY`
+  no retorno ao pool — a base do design "reaplica por-checkout" está em **(doc)**, não medida, e é o
+  único cadeado que *falha aberta*. Se o reset não limpar a var, o design simplifica; se limpar, a
+  reaplicação é obrigatória. O adaptador:
   - cria `pooling.MySQLConnectionPool(pool_name=..., pool_size=min(s.pool_max, 32),
     pool_reset_session=True, host=s.db_host, port=s.db_port or 3306, user=..., password=...,
     database=s.db_dbname, autocommit=True)`;
@@ -234,6 +258,11 @@ Acréscimo: **~15-20 testes** (o corpus MySQL + regressão + e2e).
   ruim que aceitar deixa a tabela (commit implícito). Preferir um probe **DML rollback-able** contra
   o schema (ex. `UPDATE` numa tabela do demo com `WHERE 1=0`, ou `INSERT` revertível) que o
   `GRANT SELECT` recusa com 1142/1792 e que, se aceito, o `rollback()` desfaz. Medir contra o demo.
+  ⚠️ **Coerência autocommit×rollback (revisão 2026-07-20):** a T5 step 4 põe `conectar_doctor` com
+  `autocommit=True`, onde `rollback()` é **no-op** e um DML aceito **commita na hora** — não dá pra ter
+  as duas coisas (autocommit **e** probe rollback-able). Resolver escolhendo UM: (a) probe
+  `UPDATE … WHERE 1=0` — zero linhas afetadas ⇒ zero resíduo mesmo se aceito, e o rollback vira
+  irrelevante (preferido); ou (b) conn do probe **não**-autocommit, com `rollback()` de verdade.
 - [ ] **Step 4:** `docker compose --profile mysql up -d` + `db-mcp --dialect mysql doctor` → **6/6**.
   Commit: `feat(demo): container mysql com profile + seed read-only`.
 
