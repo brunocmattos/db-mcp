@@ -1,6 +1,7 @@
 import pytest
+import sqlglot
 
-from db_mcp.dialetos import obter_dialeto
+from db_mcp.dialetos import DIALETOS_IMPLEMENTADOS, obter_dialeto
 from db_mcp.dialetos.base import Perfil
 
 
@@ -37,3 +38,19 @@ def test_perfil_so_tem_somente_leitura_nesta_fase():
     # A escrita ganha spec próprio. O parâmetro existe pra costura ficar no lugar
     # certo, mas nesta fase só há um valor possível.
     assert [p.name for p in Perfil] == ["SOMENTE_LEITURA"]
+
+
+@pytest.mark.parametrize("nome", DIALETOS_IMPLEMENTADOS)
+def test_invariante_todo_dialeto(nome):
+    # Gate pra TODO dialeto futuro (Fases 1 e 2), não só o postgres. Enumerado a partir
+    # do _REGISTRO (fonte única): quem acrescentar um dialeto sem satisfazer isto quebra
+    # o CI, não uma query em produção. Cobre os dois traps documentados no CLAUDE.md:
+    d = obter_dialeto(nome)
+    # (a) sqlglot_dialeto tem que ser um nome que o sqlglot CONHECE — pega o clássico
+    #     "sqlserver" (ValueError: Unknown dialect) escrito no lugar de "tsql".
+    assert sqlglot.transpile("SELECT 1", read=d.sqlglot_dialeto, write=d.sqlglot_dialeto) == [
+        "SELECT 1"
+    ]
+    # (b) funcs_proibidas NÃO pode ser vazia — é o único ponto da costura que falharia
+    #     ABERTO: um stub com a lista por preencher liberaria load_file('/etc/passwd').
+    assert d.funcs_proibidas, f"{nome}: funcs_proibidas vazia falharia ABERTA"
