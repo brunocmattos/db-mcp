@@ -13,6 +13,7 @@ import psycopg
 from pydantic import ValidationError
 
 from .config import Settings
+from .dialetos import obter_dialeto
 
 
 @dataclass
@@ -227,29 +228,34 @@ def checar_auth(ctx: Contexto) -> Resultado:
 
 def checar_somente_leitura(ctx: Contexto) -> Resultado:
     "Confirma que a conexão é somente-leitura"
-    if ctx.conn is None:
+    if ctx.conn is None or ctx.settings is None:
         raise PularChecagem("sem conexão")
+    # O SQL do probe e QUAIS exceções significam "write recusado" mudam por banco
+    # (Postgres: 25006/42501; SQL Server na Fase 2 não tem transação READ ONLY) —
+    # por isso vêm do dialeto, não cravados aqui. `ctx.conn.transaction()` ainda é
+    # API do psycopg; quando o SQL Server entrar, a conexão do doctor também vira
+    # do dialeto (YAGNI até lá).
+    dialeto = obter_dialeto(ctx.settings.dialeto)
 
     class _Aceito(Exception):
         pass
 
     try:
         with ctx.conn.transaction():  # BEGIN ... sempre revertido
-            ctx.conn.execute("CREATE TABLE __doctor_write_probe__ (n int)")
+            ctx.conn.execute(dialeto.sql_probe_escrita())
             raise _Aceito()  # chegou aqui = write ACEITO (ruim)
-    except (
-        psycopg.errors.InsufficientPrivilege,  # 42501 - role sem privilégio
-        psycopg.errors.ReadOnlySqlTransaction,
-    ) as e:  # 25006 - transação READ ONLY
+    except dialeto.erros_readonly as e:
         return Resultado(
-            True, "Somente-leitura confirmado", f"write recusado: {e.sqlstate} {type(e).__name__}"
+            True,
+            "Somente-leitura confirmado",
+            f"write recusado: {getattr(e, 'sqlstate', '')} {type(e).__name__}".strip(),
         )
     except _Aceito:
         return Resultado(
             False,
             "NÃO é somente-leitura",
             "o role conseguiu executar CREATE TABLE",
-            "o mcp_ro não pode ter DDL/DML: REVOKE ALL e conceda apenas SELECT",
+            "o usuário do MCP não pode ter DDL/DML: REVOKE ALL e conceda apenas SELECT",
         )
 
 
