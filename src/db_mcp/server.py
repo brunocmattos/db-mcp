@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 from typing import Any, cast
 
@@ -12,13 +11,11 @@ from fastmcp.server.dependencies import get_access_token
 from .config import Settings
 from .db import Database
 from .dialetos.base import Perfil
-from .errors import LimiteDeTaxa, McpDbError, ResultadoGrandeDemais, SqlInvalido
+from .errors import LimiteDeTaxa, McpDbError, ResultadoGrandeDemais
 from .guardrails.policy import checar_allowlist, injetar_limit
 from .guardrails.ratelimit import RateLimiter
 from .guardrails.sql import validar
 from .observability import Auditoria
-
-_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
 
 def _identificar_cliente() -> str:
@@ -34,14 +31,6 @@ def _identificar_cliente() -> str:
     return "stdio"
 
 
-def _validar_ident(nome: str) -> str:
-    """Valida um identificador simples (schema ou tabela). Bloqueia injeção de SQL
-    nas ferramentas de introspecção, que interpolam o nome direto na query."""
-    if not _IDENT.match(nome or ""):
-        raise SqlInvalido(f"identificador inválido: {nome!r}")
-    return nome
-
-
 class Nucleo:
     """Junta guardrails + db. Independente do transporte MCP (testável isolado)."""
 
@@ -53,8 +42,17 @@ class Nucleo:
         self.aud = Auditoria(s.audit_log_path)
 
     def consultar(
-        self, sql: str, cliente: str = "stdio", aplicar_allowlist: bool = True
+        self,
+        sql: str,
+        cliente: str = "stdio",
+        aplicar_allowlist: bool = True,
+        params: Any = None,
     ) -> dict[str, Any]:
+        # `params` são query parameters do driver (paramstyle %s). A introspecção usa
+        # isto para o nome de schema/tabela: o valor do agente vai por `params`, nunca
+        # concatenado no SQL — mata a classe de injeção em vez de filtrá-la por regex.
+        # O SQL com `%s` continua parseável (medido no sqlglot 30.12): validar() e
+        # injetar_limit() rodam normalmente, então o cadeado nº 3 nunca é desligado.
         t0 = time.perf_counter()
         try:
             if not self.rl.permitir(cliente):
@@ -65,7 +63,7 @@ class Nucleo:
             # Pede uma linha a mais que o teto: se ela vier, sabemos que houve corte
             # (senão `truncado` seria sempre False quando o LIMIT é o nosso).
             sql_limitado = injetar_limit(sql, self.s.max_rows + 1, self.dialeto.sqlglot_dialeto)
-            linhas, truncado = self.db.executar(sql_limitado, self.s.max_rows)
+            linhas, truncado = self.db.executar(sql_limitado, self.s.max_rows, params)
             ms = (time.perf_counter() - t0) * 1000
             # Teto sobre o tamanho da RESPOSTA, checado depois de serializar. `max_rows` já
             # limita a contagem de linhas; isto não é um limite de pico de memória.
@@ -120,46 +118,45 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
     @mcp.tool
     def listar_tabelas(schema: str = "public") -> list[dict[str, Any]]:
         """Lista as tabelas de um schema."""
-        _validar_ident(schema)
         return cast(
             "list[dict[str, Any]]",
             nucleo.consultar(
-                f"SELECT table_name FROM information_schema.tables "
-                f"WHERE table_schema = '{schema}' AND table_type = 'BASE TABLE' "
-                f"ORDER BY table_name",
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "ORDER BY table_name",
                 cliente=_identificar_cliente(),
                 aplicar_allowlist=False,
+                params=(schema,),
             )["linhas"],
         )
 
     @mcp.tool
     def listar_views(schema: str = "public") -> list[dict[str, Any]]:
         """Lista as views de um schema."""
-        _validar_ident(schema)
         return cast(
             "list[dict[str, Any]]",
             nucleo.consultar(
-                f"SELECT table_name FROM information_schema.views "
-                f"WHERE table_schema = '{schema}' ORDER BY table_name",
+                "SELECT table_name FROM information_schema.views "
+                "WHERE table_schema = %s ORDER BY table_name",
                 cliente=_identificar_cliente(),
                 aplicar_allowlist=False,
+                params=(schema,),
             )["linhas"],
         )
 
     @mcp.tool
     def descrever_tabela(tabela: str, schema: str = "public") -> list[dict[str, Any]]:
         """Colunas e tipos de uma tabela."""
-        _validar_ident(schema)
-        _validar_ident(tabela)
         return cast(
             "list[dict[str, Any]]",
             nucleo.consultar(
-                f"SELECT column_name, data_type, is_nullable "
-                f"FROM information_schema.columns "
-                f"WHERE table_schema = '{schema}' AND table_name = '{tabela}' "
-                f"ORDER BY ordinal_position",
+                "SELECT column_name, data_type, is_nullable "
+                "FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s "
+                "ORDER BY ordinal_position",
                 cliente=_identificar_cliente(),
                 aplicar_allowlist=False,
+                params=(schema, tabela),
             )["linhas"],
         )
 
