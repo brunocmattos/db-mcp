@@ -68,3 +68,16 @@ class Dialeto(Protocol):
     def sql_probe_escrita(self) -> str:
         """DDL que o doctor tenta e ESPERA que falhe."""
         ...
+
+    def sql_introspecao(
+        self, tipo: str, schema: str | None = None, tabela: str | None = None
+    ) -> tuple[str, tuple[Any, ...]]:
+        """SQL + params de introspecção (tipo: tabelas/views/colunas/schemas).
+
+        Devolve (sql, params): o identificador (schema/tabela) vai por query parameter
+        (%s), nunca concatenado — mata a injeção sem regex. Esta rota NÃO passa pelo
+        validador (o `%s` não parseia em todo dialeto — mysql dá ParseError): é SQL
+        fixo e confiável. Recusa (tipo inválido; ou schema != database no MySQL, Fase 1
+        T5) levanta McpDbError, auditado no Nucleo.introspectar.
+        """
+        ...
