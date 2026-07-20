@@ -88,11 +88,11 @@ docker compose down -v                   # derruba e apaga
 ```bash
 uv run pytest -q                         # 126 passed, 24 skipped (integração se auto-pula sem banco)
 # com banco (destrava os de integração → 150 passed, zero skipped):
-PG_HOST=localhost PG_PORT=5433 PG_DBNAME=demo PG_USER=mcp_ro PG_PASSWORD=mcp_ro_demo uv run pytest -q
+DB_HOST=localhost DB_PORT=5433 DB_DBNAME=demo DB_USER=mcp_ro DB_PASSWORD=mcp_ro_demo uv run pytest -q
 uv run ruff check . && uv run ruff format --check . && uv run mypy src
 ```
 
-O gate dos testes de integração é `.env` existir **ou** `PG_HOST` no ambiente
+O gate dos testes de integração é `.env` existir **ou** `DB_HOST` no ambiente
 (`tests/test_e2e_integration.py:10`) — sem isso eles se pulam sozinhos, e é normal.
 
 ## Estrutura

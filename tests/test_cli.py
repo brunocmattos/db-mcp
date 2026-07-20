@@ -7,7 +7,7 @@ from db_mcp.cli import montar
 
 
 def test_montar_retorna_servidor(monkeypatch):
-    for k, v in {"PG_HOST": "h", "PG_DBNAME": "d", "PG_PASSWORD": "p"}.items():
+    for k, v in {"DB_HOST": "h", "DB_DBNAME": "d", "DB_PASSWORD": "p"}.items():
         monkeypatch.setenv(k, v)
     # conectar=False não abre conexão com o banco
     mcp = montar(env_file=None, yaml_file="/nao/existe.yaml", conectar=False)
@@ -30,7 +30,7 @@ def test_doctor_subcomando_propaga_exit_code(monkeypatch):
 
 
 def test_flag_dialect_sobrescreve_a_config(monkeypatch):
-    for k in ("PG_HOST", "PG_DBNAME", "PG_PASSWORD"):
+    for k in ("DB_HOST", "DB_DBNAME", "DB_PASSWORD"):
         monkeypatch.setenv(k, "x")
     monkeypatch.delenv("DIALETO", raising=False)
     visto = {}
@@ -61,7 +61,7 @@ def test_flag_dialect_sobrescreve_a_config(monkeypatch):
 
 def test_http_sem_auth_token_recusa_subir(monkeypatch):
     # fail-closed: TRANSPORT=http sem AUTH_TOKEN nao pode subir (ficaria sem auth).
-    for k in ("PG_HOST", "PG_DBNAME", "PG_PASSWORD"):
+    for k in ("DB_HOST", "DB_DBNAME", "DB_PASSWORD"):
         monkeypatch.setenv(k, "x")
     monkeypatch.setenv("TRANSPORT", "http")
     monkeypatch.delenv("AUTH_TOKEN", raising=False)

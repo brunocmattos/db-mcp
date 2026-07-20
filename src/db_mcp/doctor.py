@@ -173,7 +173,7 @@ def checar_config(ctx: Contexto) -> Resultado:
     return Resultado(
         True,
         "Config OK",
-        f"{s.pg_user}@{s.pg_host}:{s.pg_port}/{s.pg_dbname} · allowlist={s.allowlist}",
+        f"{s.db_user}@{s.db_host}:{s.db_port or 5432}/{s.db_dbname} · allowlist={s.allowlist}",
     )
 
 
@@ -184,13 +184,13 @@ def checar_tcp(ctx: Contexto) -> Resultado:
     s = ctx.settings
     t0 = time.perf_counter()
     try:
-        with socket.create_connection((s.pg_host, s.pg_port), timeout=5):
+        with socket.create_connection((s.db_host, s.db_port or 5432), timeout=5):
             pass
     except OSError as e:
         return Resultado(
             False,
             "TCP inacessível",
-            f"{s.pg_host}:{s.pg_port} — {e}",
+            f"{s.db_host}:{s.db_port or 5432} — {e}",
             "verifique VPN, firewall e pg_hba.conf",
         )
     return Resultado(True, "TCP OK", f"conectou em {(time.perf_counter() - t0) * 1000:.0f} ms")
@@ -202,12 +202,12 @@ def checar_auth(ctx: Contexto) -> Resultado:
         raise PularChecagem("config não carregou")
     s = ctx.settings
     conninfo = psycopg.conninfo.make_conninfo(
-        host=s.pg_host,
-        port=s.pg_port,
-        dbname=s.pg_dbname,
-        user=s.pg_user,
-        password=s.pg_password,
-        sslmode=s.pg_sslmode,
+        host=s.db_host,
+        port=s.db_port or 5432,
+        dbname=s.db_dbname,
+        user=s.db_user,
+        password=s.db_password,
+        sslmode=s.db_sslmode,
         connect_timeout=5,
         application_name="db-mcp/doctor",
     )
@@ -218,7 +218,7 @@ def checar_auth(ctx: Contexto) -> Resultado:
             False,
             "Falha de autenticação",
             str(e).strip(),
-            "confira pg_user/pg_password/sslmode e a linha do mcp_ro no pg_hba.conf",
+            "confira db_user/db_password/db_sslmode e a linha do mcp_ro no pg_hba.conf",
         )
     linha = ctx.conn.execute("SELECT current_user, current_database()").fetchone()
     assert linha is not None  # SELECT de uma linha sempre retorna

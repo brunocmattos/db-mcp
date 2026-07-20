@@ -293,11 +293,11 @@ O motivo é que o programa não vem com nenhum banco embutido. Ele não conhece 
 
 Os dados de conexão ficam num arquivo chamado `.env` (pense nele como uma ficha de contato guardada num cofrinho, porque ali vai a senha). São seis informações:
 
-- `PG_HOST` — o endereço do banco (o "prédio" onde ele mora na rede).
-- `PG_PORT` — a porta de entrada nesse endereço (o padrão do PostgreSQL é a `5432`).
-- `PG_DBNAME` — o nome do banco específico (um mesmo servidor pode guardar vários almoxarifados; você escolhe qual).
-- `PG_USER` e `PG_PASSWORD` — o crachá e a senha com que o programa se identifica.
-- `PG_SSLMODE` — se a conversa com o banco vai por um canal fechado à prova de bisbilhoteiro (por padrão vem como `prefer`, que usa o canal fechado quando o banco oferece).
+- `DB_HOST` — o endereço do banco (o "prédio" onde ele mora na rede).
+- `DB_PORT` — a porta de entrada nesse endereço (o padrão do PostgreSQL é a `5432`).
+- `DB_DBNAME` — o nome do banco específico (um mesmo servidor pode guardar vários almoxarifados; você escolhe qual).
+- `DB_USER` e `DB_PASSWORD` — o crachá e a senha com que o programa se identifica.
+- `DB_SSLMODE` — se a conversa com o banco vai por um canal fechado à prova de bisbilhoteiro (por padrão vem como `prefer`, que usa o canal fechado quando o banco oferece).
 
 Você troca esses seis valores e pronto: o mesmo programa passa a falar com outro banco. Nada no código muda.
 
@@ -502,7 +502,7 @@ Quatro pedaços do código só sabem falar "postgresês".
 
 **4. O jeito de trancar em "somente-leitura".** "Somente-leitura" é a promessa central: pode olhar as fichas, não pode rasurar nem arrancar nenhuma. No PostgreSQL existe um comando elegante que declara uma transação inteira como "só leitura" — e o código usa exatamente isso (`conn.read_only = True`, no `db.py`). É um cadeado que o próprio banco oferece de fábrica. O MySQL também tem o seu (`START TRANSACTION READ ONLY`); o SQL Server é o que não oferece um botão tão limpo assim. Em ambos, a garantia acaba dependendo mais de como o usuário do banco foi criado — mas isso, veremos, vale para os três.
 
-Some a isso um detalhe: até os nomes na configuração são "postgres-centrados". No `src/db_mcp/config.py` os campos se chamam `pg_host`, `pg_port`, `pg_dbname`, `pg_user`. Tudo com o carimbo `pg`.
+Some a isso um detalhe: até os nomes na configuração são "postgres-centrados". No `src/db_mcp/config.py` os campos se chamam `db_host`, `db_port`, `db_dbname`, `db_user`. Tudo com o carimbo `pg`.
 
 ### O que joga a favor
 

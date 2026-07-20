@@ -99,7 +99,7 @@ Resumo (na mão):
 
 ```bash
 uv sync                       # instala tudo
-cp .env.example .env          # preencha PG_HOST/PG_DBNAME/PG_PASSWORD...
+cp .env.example .env          # preencha DB_HOST/DB_DBNAME/DB_PASSWORD...
 uv run db-mcp doctor # verifica config, rede, auth, read-only, allowlist, latencia
 uv run db-mcp        # sobe o servidor (stdio)
 ```

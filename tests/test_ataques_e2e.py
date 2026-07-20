@@ -15,7 +15,7 @@ from db_mcp.config import Settings
 from db_mcp.errors import ForaDaAllowlist, McpDbError, SomenteLeitura, SqlInvalido
 from db_mcp.server import Nucleo
 
-_TEM_BANCO = os.path.exists(".env") or bool(os.getenv("PG_HOST"))
+_TEM_BANCO = os.path.exists(".env") or bool(os.getenv("DB_HOST"))
 pytestmark = pytest.mark.skipif(not _TEM_BANCO, reason="sem banco configurado")
 
 ATAQUES_POSTGRES = [
