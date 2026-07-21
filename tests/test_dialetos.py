@@ -145,3 +145,62 @@ def test_sqlserver_timeout_para_o_driver_nunca_e_zero(monkeypatch, tmp_path):
     d.conectar_doctor(s)
 
     assert capturado["timeout"] >= 1, "timeout=0 no pymssql significa SEM timeout"
+
+
+def test_sqlserver_erro_readonly_nao_casa_229():
+    """229 é 'permission denied on the object' — GENÉRICO.
+
+    MEDIDO no SQL Server 2022: INSERT sem permissão dá 229, CREATE TABLE dá 262. Mas o
+    229 também sobe quando falta SELECT. Se erro_readonly casasse 229, uma conexão que
+    falhou por motivo NÃO relacionado seria classificada como 'somente-leitura
+    confirmado' — o falso positivo perigoso, no cadeado que no SQL Server é o ÚNICO
+    (não há read-only de sessão: SET TRANSACTION READ ONLY dá erro 156). Por isso o probe
+    é CREATE TABLE e a lista é {262, 3906}.
+    """
+    d = dialeto_ou_skip("sqlserver")
+    import pymssql
+
+    def erro(numero):
+        return pymssql.OperationalError(numero, b"mensagem qualquer")
+
+    assert d.erro_readonly(erro(262)) is True  # CREATE TABLE permission denied
+    assert d.erro_readonly(erro(3906)) is True  # database is read-only
+    assert d.erro_readonly(erro(229)) is False  # GENÉRICO — não pode contar
+    assert d.erro_readonly(ValueError("nada a ver")) is False
+
+
+def test_sqlserver_timeout_exige_a_marca_20003():
+    """🪤 O número do timeout não chega em args[0].
+
+    MEDIDO (pymssql 2.3.13 / SQL Server 2022, com timeout=2 e WAITFOR DELAY '00:00:10'):
+    levanta OperationalError(20047, b'...20003...Adaptive Server connection timed
+    out...DBPROCESS is dead...'). O 20047 é genérico (qualquer conexão morta) e o 20003 —
+    que identifica o timeout — só aparece no TEXTO. Casar 20003 em args[0] daria um
+    predicado que NUNCA casa; casar 20047 puro classificaria queda de rede como timeout.
+    """
+    d = dialeto_ou_skip("sqlserver")
+    import pymssql
+
+    timeout = pymssql.OperationalError(
+        20047, b"DB-Lib error message 20003, severity 6:\nAdaptive Server connection timed out\n"
+    )
+    rede = pymssql.OperationalError(20047, b"DB-Lib error message 20047:\nDBPROCESS is dead\n")
+
+    assert d.erro_de_timeout(timeout) is True
+    assert d.erro_de_timeout(rede) is False, "conexão morta sem timeout não é timeout"
+    assert d.erro_de_timeout(ValueError("nada a ver")) is False
+
+
+def test_sqlserver_erro_do_banco_so_pega_erro_do_driver():
+    d = dialeto_ou_skip("sqlserver")
+    import pymssql
+
+    assert d.erro_do_banco(pymssql.OperationalError(208, b"Invalid object name")) is True
+    assert d.erro_do_banco(ValueError("erro nosso, não do banco")) is False
+
+
+def test_sqlserver_probe_de_escrita_e_create_table():
+    # CREATE TABLE, não INSERT: o CREATE dá 262 (inequívoco) e o INSERT dá 229 (genérico).
+    sql = dialeto_ou_skip("sqlserver").sql_probe_escrita()
+    assert "CREATE TABLE" in sql.upper()
+    assert "INSERT" not in sql.upper()

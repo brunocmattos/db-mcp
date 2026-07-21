@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -59,6 +59,28 @@ FUNCS_PROIBIDAS_SQLSERVER = frozenset(
         "fn_my_permissions",
     }
 )
+
+
+# Escrita recusada:
+#   262  — CREATE TABLE permission denied in database. MEDIDO no SQL Server 2022 /
+#          pymssql 2.3.13.
+#   3906 — Failed to update database because it is read-only. NÃO MEDIDO — veio da
+#          documentação da Microsoft (mensagem do erro 3906). Falha de processo deste
+#          projeto deixar isso sem marcar; corrigido aqui em vez de rotular como medido.
+#
+# ⚠️ O 229 (permission denied on the object) fica DE FORA de propósito: é genérico e
+# também sobe por falta de SELECT. Casá-lo faria o doctor confirmar "somente-leitura"
+# para conexão que falhou por outro motivo — e aqui o GRANT é o ÚNICO cadeado, porque
+# o SQL Server não tem read-only de sessão (medido: SET TRANSACTION READ ONLY dá 156).
+NUMEROS_READONLY = frozenset({262, 3906})
+
+# Timeout de query, MEDIDO (pymssql 2.3.13 / SQL Server 2022):
+#   args[0] = 20047  "DBPROCESS is dead or not enabled"    <- genérico, qualquer conexão morta
+#   texto   = 20003  "Adaptive Server connection timed out" <- o que realmente identifica
+# O número do timeout NÃO chega em args[0]. Escrever 20003 na constante faria um predicado
+# que nunca casa; casar só 20047 classificaria queda de rede como timeout. Exigimos os dois.
+NUMERO_CONEXAO_MORTA = 20047
+MARCA_TIMEOUT = b"20003"
 
 
 class _ConexaoPorConsulta:
@@ -145,16 +167,35 @@ class DialetoSqlServer:
     # verdade.
 
     def probar_escrita(self, conn: Any) -> None:
-        raise NotImplementedError  # Task 4
+        cur = conn.cursor()
+        try:
+            cur.execute(self.sql_probe_escrita())
+            # Chegou aqui = a escrita PASSOU (usuário mal configurado). Limpa o resíduo;
+            # best-effort, porque o diagnóstico ruim já é o que importa.
+            with suppress(Exception):
+                cur.execute("DROP TABLE __doctor_write_probe__")
+        finally:
+            cur.close()
+
+    def _numero(self, e: Exception) -> int | None:
+        """Número do erro DB-Lib. O pymssql o entrega em `e.args[0]`."""
+        args: tuple[Any, ...] = getattr(e, "args", ())
+        return args[0] if args and isinstance(args[0], int) else None
 
     def erro_readonly(self, e: Exception) -> bool:
-        raise NotImplementedError  # Task 4
+        return isinstance(e, self._pymssql.Error) and self._numero(e) in NUMEROS_READONLY
 
     def erro_de_timeout(self, e: Exception) -> bool:
-        raise NotImplementedError  # Task 4
+        if not isinstance(e, self._pymssql.Error) or self._numero(e) != NUMERO_CONEXAO_MORTA:
+            return False
+        args: tuple[Any, ...] = getattr(e, "args", ())
+        texto = args[1] if len(args) > 1 else b""
+        if isinstance(texto, str):
+            texto = texto.encode("utf-8", "replace")
+        return MARCA_TIMEOUT in texto
 
     def erro_do_banco(self, e: Exception) -> bool:
-        raise NotImplementedError  # Task 4
+        return isinstance(e, self._pymssql.Error)
 
     def linhas_como_dict(self, conn: Any) -> AbstractContextManager[Any]:
         raise NotImplementedError  # Task 5
@@ -163,7 +204,9 @@ class DialetoSqlServer:
         raise NotImplementedError  # Task 5
 
     def sql_probe_escrita(self) -> str:
-        raise NotImplementedError  # Task 4
+        # CREATE TABLE, não INSERT: o CREATE dá 262 (inequívoco), o INSERT dá 229
+        # (genérico). Ver NUMEROS_READONLY.
+        return "CREATE TABLE __doctor_write_probe__ (n int)"
 
     def sql_identidade(self) -> str:
         raise NotImplementedError  # Task 5
