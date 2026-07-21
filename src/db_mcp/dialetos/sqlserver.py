@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -59,6 +61,33 @@ FUNCS_PROIBIDAS_SQLSERVER = frozenset(
 )
 
 
+class _ConexaoPorConsulta:
+    """`PoolLike` sem pool: cada `.connection()` abre uma conexão nova.
+
+    O pymssql não tem pool (medido) e o SQL Server não tem reset de sessão — não existe
+    `DISCARD ALL` nem `RESET CONNECTION`. Reusar conexão aqui exigiria reimplementar à mão
+    justamente a peça que falhou ABERTA e em silêncio no MySQL (`pool_reset_session`
+    zerando o read-only). Conexão nova É o reset.
+
+    Custo medido: handshake ~14,3 ms (15,61 ms conexão nova vs 1,28 ms reusada), ~1% do
+    round-trip percebido numa consulta via MCP.
+    """
+
+    def __init__(self, conectar: Callable[[], Any]) -> None:
+        self._conectar = conectar
+
+    @contextmanager
+    def connection(self) -> Iterator[Any]:
+        conn = self._conectar()
+        try:
+            yield conn
+        finally:
+            conn.close()  # sem pool: close() FECHA de verdade
+
+    def close(self) -> None:
+        """No-op: não há nada retido. Existe só para satisfazer `PoolLike`."""
+
+
 class DialetoSqlServer:
     # 🪤 nome != sqlglot_dialeto. No sqlglot o SQL Server é "tsql"; "sqlserver" levanta
     # ValueError em TODA query — e uma recusa que não é McpDbError escapa da auditoria.
@@ -76,11 +105,37 @@ class DialetoSqlServer:
     def schema_padrao(self) -> str:
         return "dbo"
 
+    def _conectar(self, s: Settings) -> Any:
+        return self._pymssql.connect(
+            server=s.db_host,
+            # o stub do pymssql tipa `port` como str (medido: as 3 sobrecargas de
+            # `connect` em _pymssql.pyi declaram `port: str = ...`) — sem o str() o
+            # mypy recusa por nenhuma sobrecarga bater com int.
+            port=str(s.db_port or self.porta_padrao),
+            database=s.db_dbname,
+            user=s.db_user,
+            password=s.db_password,
+            autocommit=True,
+            login_timeout=5,
+            # timeout de query é client-side: não existe statement_timeout de servidor
+            # como no Postgres nem max_execution_time como no MySQL. O max(1, ...) não é
+            # só arredondamento: no pymssql `timeout=0` significa SEM timeout (medido no
+            # docstring de `connect`), então statement_timeout_ms < 1000 truncado por
+            # divisão inteira viraria 0 e desligaria o timeout em silêncio — o mesmo
+            # padrão de falha ABERTA da Fase 1. Arredondar pra cima (timeout > pedido)
+            # é o preço aceitável pra nunca cair nesse 0.
+            timeout=max(1, s.statement_timeout_ms // 1000),
+        )
+
     def criar_pool(self, s: Settings) -> PoolLike:
-        raise NotImplementedError  # Task 3
+        return _ConexaoPorConsulta(lambda: self._conectar(s))
 
     def conectar_doctor(self, s: Settings) -> Any:
-        raise NotImplementedError  # Task 3
+        # ⚠️ Mesma conexão de sempre, sem nenhum cadeado de aplicação — porque não existe
+        # nenhum (medido: SET TRANSACTION READ ONLY dá erro 156, sintaxe inválida). O doctor
+        # verifica o cadeado nº 1 (o GRANT); se ele mesmo trancasse a sessão, o probe
+        # testaria o próprio cadeado e um usuário gravável passaria como "somente-leitura".
+        return self._conectar(s)
 
     # --- Placeholders restantes do Protocol Dialeto -----------------------------
     #

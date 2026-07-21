@@ -71,3 +71,37 @@ def test_invariante_todo_dialeto(nome):
     # (b) funcs_proibidas NÃO pode ser vazia — é o único ponto da costura que falharia
     #     ABERTO: um stub com a lista por preencher liberaria load_file('/etc/passwd').
     assert d.funcs_proibidas, f"{nome}: funcs_proibidas vazia falharia ABERTA"
+
+
+def test_sqlserver_nao_reusa_conexao():
+    """O 'pool' do SQL Server abre conexão NOVA a cada checkout.
+
+    O pymssql não tem pool (medido: nenhum símbolo 'pool' no módulo), e este dialeto é o
+    único sem reset de sessão. Abrir nova por consulta é o que faz o gap desaparecer em
+    vez de virar resíduo: sem reuso, não há estado a vazar. Este teste existe para
+    impedir que alguém 'otimize' isso guardando a conexão.
+    """
+    # chamado só pelo efeito colateral: pula se o extra sqlserver não estiver instalado,
+    # igual ao resto da suíte — _ConexaoPorConsulta em si não usa o pymssql.
+    dialeto_ou_skip("sqlserver")
+    abertas = []
+
+    class _FakeConn:
+        def __init__(self):
+            abertas.append(self)
+            self.fechada = False
+
+        def close(self):
+            self.fechada = True
+
+    from db_mcp.dialetos.sqlserver import _ConexaoPorConsulta
+
+    pool = _ConexaoPorConsulta(_FakeConn)
+    with pool.connection() as c1:
+        pass
+    with pool.connection() as c2:
+        pass
+
+    assert len(abertas) == 2, "cada checkout tem que abrir uma conexão NOVA"
+    assert c1 is not c2
+    assert c1.fechada and c2.fechada, "a conexão tem que ser fechada ao sair do with"
