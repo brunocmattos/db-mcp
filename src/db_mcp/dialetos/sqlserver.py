@@ -4,9 +4,13 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from contextlib import AbstractContextManager
+import sqlglot
+from sqlglot import exp
+from sqlglot.errors import SqlglotError
 
+from ..errors import SqlInvalido
+
+if TYPE_CHECKING:
     from ..config import Settings
     from .base import PoolLike
 
@@ -159,13 +163,6 @@ class DialetoSqlServer:
         # testaria o próprio cadeado e um usuário gravável passaria como "somente-leitura".
         return self._conectar(s)
 
-    # --- Placeholders restantes do Protocol Dialeto -----------------------------
-    #
-    # Sem eles o mypy strict recusa `_sqlserver() -> Dialeto` (Protocol estrutural
-    # exige TODOS os membros, não só os que o T1 usa). Cada um preenche na task
-    # marcada no comentário; aqui só existem pra o esqueleto tipar como Dialeto de
-    # verdade.
-
     def probar_escrita(self, conn: Any) -> None:
         cur = conn.cursor()
         try:
@@ -197,11 +194,23 @@ class DialetoSqlServer:
     def erro_do_banco(self, e: Exception) -> bool:
         return isinstance(e, self._pymssql.Error)
 
-    def linhas_como_dict(self, conn: Any) -> AbstractContextManager[Any]:
-        raise NotImplementedError  # Task 5
+    @contextmanager
+    def linhas_como_dict(self, conn: Any) -> Iterator[Any]:
+        cur = conn.cursor(as_dict=True)
+        try:
+            yield cur
+        finally:
+            cur.close()
 
     def sql_amostra(self, tabela: str, n: int) -> str:
-        raise NotImplementedError  # Task 5
+        # SqlglotError (não ParseError): o tokenizer levanta TokenError, que é IRMÃ e não
+        # filha — deixar vazar seria recusa sem auditoria (o bug corrigido no 74aba49).
+        try:
+            tab = sqlglot.parse_one(tabela, into=exp.Table, read=self.sqlglot_dialeto)
+        except SqlglotError as e:
+            raise SqlInvalido(f"nome de tabela inválido: {tabela!r}") from e
+        nome = tab.sql(dialect=self.sqlglot_dialeto, identify=True)
+        return f"SELECT TOP {n} * FROM {nome}"
 
     def sql_probe_escrita(self) -> str:
         # CREATE TABLE, não INSERT: o CREATE dá 262 (inequívoco), o INSERT dá 229
@@ -209,9 +218,43 @@ class DialetoSqlServer:
         return "CREATE TABLE __doctor_write_probe__ (n int)"
 
     def sql_identidade(self) -> str:
-        raise NotImplementedError  # Task 5
+        # MEDIDO contra SQL Server 2022: devolve ('sa', 'master'). `current_database()` do
+        # Postgres é `database()` no MySQL e `DB_NAME()` aqui — os apelidos `usuario`/`banco`
+        # são o contrato que mantém a chave do dict igual entre dialetos.
+        return "SELECT SUSER_SNAME() AS usuario, DB_NAME() AS banco"
 
     def sql_introspecao(
         self, tipo: str, schema: str | None = None, tabela: str | None = None
     ) -> tuple[str, tuple[Any, ...]]:
-        raise NotImplementedError  # Task 5
+        # Diferente do MySQL: aqui schema é schema DE VERDADE (dbo, etc.) dentro do
+        # database, então information_schema.schemata é seguro — lista os schemas do
+        # banco corrente, não os bancos da instância.
+        if tipo == "schemas":
+            return (
+                "SELECT schema_name AS schema_name FROM information_schema.schemata "
+                "ORDER BY schema_name",
+                (),
+            )
+        if tipo == "tabelas":
+            return (
+                "SELECT table_name AS table_name FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "ORDER BY table_name",
+                (schema,),
+            )
+        if tipo == "views":
+            return (
+                "SELECT table_name AS table_name FROM information_schema.views "
+                "WHERE table_schema = %s ORDER BY table_name",
+                (schema,),
+            )
+        if tipo == "colunas":
+            return (
+                "SELECT column_name AS column_name, data_type AS data_type, "
+                "is_nullable AS is_nullable "
+                "FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s "
+                "ORDER BY ordinal_position",
+                (schema, tabela),
+            )
+        raise SqlInvalido(f"tipo de introspecção desconhecido: {tipo!r}")
