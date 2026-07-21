@@ -43,9 +43,30 @@ class Dialeto(Protocol):
     sqlglot_dialeto: str
     funcs_proibidas: frozenset[str]
     schema_padrao: str
+    porta_padrao: int  # 5432≠3306: `db_port` é opcional e cada dialeto aplica a sua
     erros_readonly: tuple[type[Exception], ...]
 
     def criar_pool(self, s: Settings) -> PoolLike: ...
+
+    def conectar_doctor(self, s: Settings) -> Any:
+        """Conexão avulsa (fora do pool) para o doctor, em autocommit.
+
+        Fora do pool de propósito: o doctor checa a saúde da configuração antes de
+        o servidor existir, e o probe de escrita precisa de uma sessão que ele
+        controle. Erro de conexão/autenticação sobe cru — o doctor decide com
+        `erro_do_banco`.
+        """
+        ...
+
+    def probar_escrita(self, conn: Any) -> None:
+        """Roda o `sql_probe_escrita` e VOLTA se o banco ACEITOU a escrita (ruim).
+
+        Se o banco recusar, deixa o erro do driver subir — quem classifica é o
+        doctor, por `erros_readonly`. A impl é responsável por não deixar nada
+        gravado quando a escrita passa (o Postgres reverte a transação; o MySQL
+        fará o seu na T5 — lá o DDL tem commit implícito).
+        """
+        ...
 
     def erro_de_timeout(self, e: Exception) -> bool:
         """True se a exceção do driver representa query cortada por timeout."""
@@ -67,6 +88,15 @@ class Dialeto(Protocol):
 
     def sql_probe_escrita(self) -> str:
         """DDL que o doctor tenta e ESPERA que falhe."""
+        ...
+
+    def sql_identidade(self) -> str:
+        """SELECT de UMA linha com quem/onde estamos conectados.
+
+        Deve nomear as colunas `usuario` e `banco` (o doctor lê por essas chaves):
+        o `current_database()` do Postgres é `database()` no MySQL, então sem apelido
+        a chave do dict mudaria junto com o dialeto.
+        """
         ...
 
     def sql_introspecao(
