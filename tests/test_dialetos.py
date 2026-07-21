@@ -204,3 +204,41 @@ def test_sqlserver_probe_de_escrita_e_create_table():
     sql = dialeto_ou_skip("sqlserver").sql_probe_escrita()
     assert "CREATE TABLE" in sql.upper()
     assert "INSERT" not in sql.upper()
+
+
+def test_sqlserver_sql_amostra_usa_top_e_colchetes():
+    # T-SQL não tem LIMIT — o sqlglot emite TOP. identify=True cita com COLCHETES,
+    # que é o que faz nome reservado (Order -> [Order]) funcionar sem regex.
+    sql = dialeto_ou_skip("sqlserver").sql_amostra("clientes", 5)
+    assert sql == "SELECT TOP 5 * FROM [clientes]"
+
+
+def test_sqlserver_sql_amostra_recusa_nome_invalido():
+    # SqlglotError, não ParseError: o tokenizer levanta TokenError, que é IRMÃ e não
+    # filha — deixar vazar seria recusa sem auditoria.
+    from db_mcp.errors import SqlInvalido
+
+    with pytest.raises(SqlInvalido):
+        dialeto_ou_skip("sqlserver").sql_amostra("nome 'nao fechado", 5)
+
+
+def test_sqlserver_sql_identidade_nomeia_usuario_e_banco():
+    # MEDIDO contra SQL Server 2022: devolve ('sa', 'master'). Os apelidos são o
+    # contrato que mantém a chave do dict igual entre dialetos.
+    sql = dialeto_ou_skip("sqlserver").sql_identidade()
+    assert "AS usuario" in sql and "AS banco" in sql
+
+
+def test_sqlserver_introspecao_passa_identificador_por_parametro():
+    d = dialeto_ou_skip("sqlserver")
+    sql, params = d.sql_introspecao("colunas", schema="dbo", tabela="clientes")
+    assert "%s" in sql
+    assert params == ("dbo", "clientes")
+    assert "clientes" not in sql  # nunca concatenado
+
+
+def test_sqlserver_introspecao_tipo_invalido_recusa():
+    from db_mcp.errors import SqlInvalido
+
+    with pytest.raises(SqlInvalido):
+        dialeto_ou_skip("sqlserver").sql_introspecao("inexistente")
