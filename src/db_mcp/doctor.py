@@ -7,13 +7,12 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TextIO
+from typing import Any, TextIO
 
-import psycopg
 from pydantic import ValidationError
 
 from .config import Settings
-from .dialetos import obter_dialeto
+from .dialetos import Dialeto, obter_dialeto
 
 
 @dataclass
@@ -38,7 +37,10 @@ class Contexto:
         self.env_file = env_file
         self.yaml_file = yaml_file
         self.settings: Settings | None = None  # preenchido por checar_config
-        self.conn: psycopg.Connection | None = None  # preenchido por checar_auth
+        self.dialeto: Dialeto | None = None  # idem — resolvido a partir do settings
+        # `Any`, não `psycopg.Connection`: a conexão vem do dialeto e o tipo muda por
+        # driver. O doctor só a usa através do contrato (linhas_como_dict/probar_escrita).
+        self.conn: Any = None  # preenchido por checar_auth
 
 
 Checagem = Callable[[Contexto], Resultado]
@@ -170,120 +172,124 @@ def checar_config(ctx: Contexto) -> Resultado:
             "confira os caminhos passados em --env / --config",
         )
     s = ctx.settings
+    # O dialeto entra aqui porque tudo depois dele depende: porta padrão, conexão,
+    # probe e SQL de identidade saem do contrato. Um dialeto aceito pela config mas
+    # sem implementação (ou com o extra do driver faltando) morre com mensagem legível
+    # em vez de estourar cru na próxima checagem.
+    try:
+        ctx.dialeto = obter_dialeto(s.dialeto)
+    except Exception as e:
+        return Resultado(
+            False,
+            "Dialeto indisponível",
+            f"{s.dialeto!r}: {e}",
+            f"dialeto sem implementação nesta versão, ou driver não instalado "
+            f"(ex.: uv sync --extra {s.dialeto})",
+        )
     return Resultado(
         True,
         "Config OK",
-        f"{s.db_user}@{s.db_host}:{s.db_port or 5432}/{s.db_dbname} · allowlist={s.allowlist}",
+        f"{s.db_user}@{s.db_host}:{s.db_port or ctx.dialeto.porta_padrao}/{s.db_dbname}"
+        f" · dialeto={ctx.dialeto.nome} · allowlist={s.allowlist}",
     )
 
 
 def checar_tcp(ctx: Contexto) -> Resultado:
     "TCP alcança host:porta"
-    if ctx.settings is None:
+    if ctx.settings is None or ctx.dialeto is None:
         raise PularChecagem("config não carregou")
     s = ctx.settings
+    porta = s.db_port or ctx.dialeto.porta_padrao
     t0 = time.perf_counter()
     try:
-        with socket.create_connection((s.db_host, s.db_port or 5432), timeout=5):
+        with socket.create_connection((s.db_host, porta), timeout=5):
             pass
     except OSError as e:
         return Resultado(
             False,
             "TCP inacessível",
-            f"{s.db_host}:{s.db_port or 5432} — {e}",
-            "verifique VPN, firewall e pg_hba.conf",
+            f"{s.db_host}:{porta} — {e}",
+            "verifique VPN, firewall e as regras de acesso do servidor (pg_hba.conf no Postgres)",
         )
     return Resultado(True, "TCP OK", f"conectou em {(time.perf_counter() - t0) * 1000:.0f} ms")
 
 
 def checar_auth(ctx: Contexto) -> Resultado:
     "Autentica como o usuário read-only"
-    if ctx.settings is None:
+    if ctx.settings is None or ctx.dialeto is None:
         raise PularChecagem("config não carregou")
-    s = ctx.settings
-    conninfo = psycopg.conninfo.make_conninfo(
-        host=s.db_host,
-        port=s.db_port or 5432,
-        dbname=s.db_dbname,
-        user=s.db_user,
-        password=s.db_password,
-        sslmode=s.db_sslmode,
-        connect_timeout=5,
-        application_name="db-mcp/doctor",
-    )
+    d = ctx.dialeto
     try:
-        ctx.conn = psycopg.connect(conninfo, autocommit=True)
-    except psycopg.OperationalError as e:
+        ctx.conn = d.conectar_doctor(ctx.settings)
+    except Exception as e:
+        if not d.erro_do_banco(e):
+            raise  # não é recusa do banco: sobe e vira "erro inesperado" no `rodar`
         return Resultado(
             False,
             "Falha de autenticação",
             str(e).strip(),
-            "confira db_user/db_password/db_sslmode e a linha do mcp_ro no pg_hba.conf",
+            "confira db_user/db_password/db_sslmode e a regra de acesso do servidor"
+            " (linha do usuário no pg_hba.conf, no Postgres)",
         )
-    linha = ctx.conn.execute("SELECT current_user, current_database()").fetchone()
+    with d.linhas_como_dict(ctx.conn) as cur:
+        cur.execute(d.sql_identidade())
+        linha = cur.fetchone()
     assert linha is not None  # SELECT de uma linha sempre retorna
-    u, db = linha
-    return Resultado(True, "Autenticou", f"current_user={u} · db={db}")
+    return Resultado(True, "Autenticou", f"current_user={linha['usuario']} · db={linha['banco']}")
 
 
 def checar_somente_leitura(ctx: Contexto) -> Resultado:
     "Confirma que a conexão é somente-leitura"
-    if ctx.conn is None or ctx.settings is None:
+    if ctx.conn is None or ctx.dialeto is None:
         raise PularChecagem("sem conexão")
-    # O SQL do probe e QUAIS exceções significam "write recusado" mudam por banco
-    # (Postgres: 25006/42501; SQL Server na Fase 2 não tem transação READ ONLY) —
-    # por isso vêm do dialeto, não cravados aqui. `ctx.conn.transaction()` ainda é
-    # API do psycopg; quando o SQL Server entrar, a conexão do doctor também vira
-    # do dialeto (YAGNI até lá).
-    dialeto = obter_dialeto(ctx.settings.dialeto)
-
-    class _Aceito(Exception):
-        pass
-
+    # QUAL escrita tentar, COMO revertê-la e QUAIS erros significam "write recusado"
+    # mudam por banco (Postgres: 25006/42501 e transação revertível; MySQL: DDL com
+    # commit implícito; SQL Server na Fase 2 nem tem transação READ ONLY) — por isso
+    # a mecânica inteira mora no dialeto. Aqui só resta a leitura do veredito.
+    d = ctx.dialeto
     try:
-        with ctx.conn.transaction():  # BEGIN ... sempre revertido
-            ctx.conn.execute(dialeto.sql_probe_escrita())
-            raise _Aceito()  # chegou aqui = write ACEITO (ruim)
-    except dialeto.erros_readonly as e:
+        d.probar_escrita(ctx.conn)
+    except d.erros_readonly as e:
         return Resultado(
             True,
             "Somente-leitura confirmado",
             f"write recusado: {getattr(e, 'sqlstate', '')} {type(e).__name__}".strip(),
         )
-    except _Aceito:
-        return Resultado(
-            False,
-            "NÃO é somente-leitura",
-            "o role conseguiu executar CREATE TABLE",
-            "o usuário do MCP não pode ter DDL/DML: REVOKE ALL e conceda apenas SELECT",
-        )
+    return Resultado(  # voltou sem erro = a escrita PASSOU
+        False,
+        "NÃO é somente-leitura",
+        "o usuário do banco conseguiu executar a escrita de teste",
+        "o usuário do MCP não pode ter DDL/DML: REVOKE ALL e conceda apenas SELECT",
+    )
 
 
 def checar_allowlist_existe(ctx: Contexto) -> Resultado:
     "Tabelas da allowlist existem"
-    if ctx.conn is None or ctx.settings is None:
+    if ctx.conn is None or ctx.settings is None or ctx.dialeto is None:
         raise PularChecagem("sem conexão")
+    d = ctx.dialeto
     alvos = [t for t in ctx.settings.allowlist if t != "*"]
     if not alvos:
         return Resultado(True, "Allowlist = todas (*)", "nada específico a verificar")
 
-    schemas, nomes = [], []
+    pares = []
     for t in alvos:
         sch, _, tab = t.partition(".")
-        schemas.append(sch if tab else "public")
-        nomes.append(tab or sch)
+        pares.append((sch if tab else d.schema_padrao, tab or sch))
 
-    linhas = ctx.conn.execute(
-        """
-        SELECT x.sch, x.tab, (t.table_name IS NOT NULL) AS existe
-        FROM unnest(%s::text[], %s::text[]) AS x(sch, tab)
-        LEFT JOIN information_schema.tables t
-               ON t.table_schema = x.sch AND t.table_name = x.tab
-        """,
-        (schemas, nomes),
-    ).fetchall()
-
-    faltando = [f"{sch}.{tab}" for sch, tab, existe in linhas if not existe]
+    # Laço Python, uma query por tabela: o `unnest(%s::text[])` de antes era Postgres puro
+    # (array literal + cast). A allowlist tem punhado de itens, então N queries triviais no
+    # doctor custam menos que um SQL que precise de uma forma por dialeto.
+    faltando = []
+    with d.linhas_como_dict(ctx.conn) as cur:
+        for sch, tab in pares:
+            cur.execute(
+                "SELECT 1 AS existe FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_name = %s",
+                (sch, tab),
+            )
+            if cur.fetchone() is None:
+                faltando.append(f"{sch}.{tab}")
     if faltando:
         return Resultado(
             False,
@@ -296,13 +302,15 @@ def checar_allowlist_existe(ctx: Contexto) -> Resultado:
 
 def checar_latencia(ctx: Contexto) -> Resultado:
     "Mede latência de uma query trivial (SELECT 1)"
-    if ctx.conn is None:
+    if ctx.conn is None or ctx.dialeto is None:
         raise PularChecagem("sem conexão")
     amostras = []
-    for _ in range(5):
-        t0 = time.perf_counter()
-        ctx.conn.execute("SELECT 1").fetchone()
-        amostras.append((time.perf_counter() - t0) * 1000)
+    with ctx.dialeto.linhas_como_dict(ctx.conn) as cur:
+        for _ in range(5):
+            t0 = time.perf_counter()
+            cur.execute("SELECT 1")
+            cur.fetchone()
+            amostras.append((time.perf_counter() - t0) * 1000)
     amostras.sort()
     mediana = amostras[len(amostras) // 2]
     detalhe = f"mediana {mediana:.1f} ms (min {amostras[0]:.1f} · max {amostras[-1]:.1f})"
@@ -311,7 +319,7 @@ def checar_latencia(ctx: Contexto) -> Resultado:
             False,
             "Latência SELECT 1",
             detalhe,
-            "latência crítica: verifique a rota de rede/VPN até o Postgres",
+            "latência crítica: verifique a rota de rede/VPN até o banco",
         )
     if mediana > 250:  # aviso (ainda ok)
         return Resultado(True, "Latência SELECT 1", detalhe + "  (alta — atenção à VPN)")

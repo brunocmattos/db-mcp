@@ -87,6 +87,7 @@ class DialetoPostgres:
     sqlglot_dialeto = "postgres"
     funcs_proibidas = FUNCS_PROIBIDAS_POSTGRES
     schema_padrao = "public"
+    porta_padrao = 5432
 
     def __init__(self) -> None:
         import psycopg  # lazy: o extra `postgres` só é exigido de quem usa postgres
@@ -103,7 +104,7 @@ class DialetoPostgres:
 
         conninfo = psycopg.conninfo.make_conninfo(
             host=s.db_host,
-            port=s.db_port or 5432,  # default do dialeto Postgres quando db_port é None
+            port=s.db_port or self.porta_padrao,  # db_port é opcional; o dialeto decide
             dbname=s.db_dbname,
             user=s.db_user,
             password=s.db_password,
@@ -143,6 +144,35 @@ class DialetoPostgres:
             conn.autocommit = autocommit
             conn.read_only = True  # DISCARD ALL zera o modo read-only; reaplica
 
+    def conectar_doctor(self, s: Settings) -> Any:
+        import psycopg
+
+        conninfo = psycopg.conninfo.make_conninfo(
+            host=s.db_host,
+            port=s.db_port or self.porta_padrao,
+            dbname=s.db_dbname,
+            user=s.db_user,
+            password=s.db_password,
+            sslmode=s.db_sslmode,
+            connect_timeout=5,
+            application_name="db-mcp/doctor",
+        )
+        return psycopg.connect(conninfo, autocommit=True)
+
+    def probar_escrita(self, conn: Any) -> None:
+        # Sair do bloco por exceção é o que força o ROLLBACK: se o CREATE TABLE passar
+        # (banco NÃO é read-only), o `_Aceito` desfaz a tabela antes de voltar. Um
+        # `return` aqui dentro faria o `transaction()` COMMITAR o probe.
+        class _Aceito(Exception):
+            pass
+
+        try:
+            with conn.transaction():  # BEGIN ... sempre revertido
+                conn.execute(self.sql_probe_escrita())
+                raise _Aceito()
+        except _Aceito:
+            return  # write ACEITO — quem interpreta é o doctor
+
     def erro_de_timeout(self, e: Exception) -> bool:
         return isinstance(e, self._psycopg.errors.QueryCanceled)
 
@@ -173,6 +203,10 @@ class DialetoPostgres:
 
     def sql_probe_escrita(self) -> str:
         return "CREATE TABLE __doctor_write_probe__ (n int)"
+
+    def sql_identidade(self) -> str:
+        # Apelidos fixos (`usuario`/`banco`): o doctor lê o dict por essas chaves.
+        return "SELECT current_user AS usuario, current_database() AS banco"
 
     def sql_introspecao(
         self, tipo: str, schema: str | None = None, tabela: str | None = None
