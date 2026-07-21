@@ -133,22 +133,38 @@ Acréscimo: **~3-4 testes** (introspecção auditada + testável sem banco).
 **Files:** `src/db_mcp/dialetos/base.py`, `src/db_mcp/dialetos/postgres.py`, `src/db_mcp/doctor.py`,
 `tests/test_doctor.py`.
 
-Postgres-only, **doctor 6/6 idêntico**.
+Postgres-only, **doctor 6/6 idêntico**. ✅ **FEITA (2026-07-21, `ba9836e`).**
 
-- [ ] **Step 1 (contrato):** adicionar ao `Dialeto`: `conectar_doctor(s) -> conn` (conexão avulsa,
+> 🔧 **Estendida na execução (aprovado pelo Bruno): +2 membros no contrato que o passo a passo
+> abaixo esquecia**, e sem os quais a T7 teria que mexer no `doctor.py` de novo — ou seja, a T3 não
+> teria preparado nada:
+> - **`porta_padrao: int`** (postgres `5432`). O literal `5432` estava cravado em **3 pontos** do
+>   `doctor.py` (`checar_config` e `checar_tcp` ×2). Como a T1 tornou `db_port` opcional de propósito
+>   (5432≠3306), `db-mcp --dialect mysql doctor` sem `DB_PORT` tentaria TCP na porta do Postgres.
+> - **`sql_identidade() -> str`.** O `checar_auth` rodava `SELECT current_user, current_database()`,
+>   Postgres puro (⚠️ **documentado, não medido** — sem MySQL vivo até a T7: lá é `database()`).
+>   Contrato exige apelidar as colunas `usuario`/`banco`, senão a chave do dict muda com o dialeto.
+>
+> Bônus: `checar_config` passou a **resolver o dialeto** e a dar erro legível quando ele não tem
+> implementação (hoje `mysql`/`sqlserver` são aceitos pelo `Literal` do config) em vez de estourar
+> cru na checagem seguinte. Continuam sendo 6 checagens.
+
+- [x] **Step 1 (contrato):** adicionar ao `Dialeto`: `conectar_doctor(s) -> conn` (conexão avulsa,
   autocommit) e `probar_escrita(conn) -> None` (roda o `sql_probe_escrita` e deixa o erro readonly
   subir). Mover o bloco `psycopg.connect(...)`/`make_conninfo` e a dança `transaction()/ROLLBACK`
   do `doctor.py` pro `postgres.py`.
-- [ ] **Step 2 (doctor):** `Contexto.conn: Any` (era `psycopg.Connection`); `checar_auth` usa
+- [x] **Step 2 (doctor):** `Contexto.conn: Any` (era `psycopg.Connection`); `checar_auth` usa
   `dialeto.conectar_doctor(s)`; `checar_somente_leitura` vira `try: dialeto.probar_escrita(ctx.conn)
   except dialeto.<readonly>`; `checar_auth`/`checar_latencia` usam `dialeto.linhas_como_dict(conn)`
   em vez de `conn.execute().fetchone()`. **Reescrever `checar_allowlist_existe` driver-agnóstico:**
   laço Python consultando `information_schema.tables` uma vez por tabela (o `unnest(%s::text[])` é
   Postgres puro).
-- [ ] **Step 3:** `doctor 6/6` contra o demo Postgres, `write recusado: 25006` idêntico. Commit:
+- [x] **Step 3:** `doctor 6/6` contra o demo Postgres, `write recusado: 25006` idêntico. Commit:
   `refactor(doctor): conexao e probe delegam ao dialeto`.
 
-Acréscimo: **~1-2 testes** (a costura nova do doctor, com fake conn).
+Acréscimo: ~~**~1-2 testes**~~ → **+5** (dialeto e cursor falsos, sem banco). Os dois caminhos da
+allowlist reescrita também foram exercitados **ao vivo** (tabela real e ausente) — o `doctor` normal
+cai no atalho `*` e nunca tocaria o laço novo.
 
 ---
 
@@ -161,9 +177,12 @@ própria). Vira **`erro_readonly(e: Exception) -> bool`** (predicado): Postgres 
 das duas classes; MySQL testará `e.errno in {1792, 1142}` (T5). O doctor troca
 `except dialeto.erros_readonly` por captura ampla + `if dialeto.erro_readonly(e)`.
 
-- [ ] Postgres-only, comportamento idêntico. Commit: `refactor(dialeto): erro_readonly como predicado`.
+- [x] Postgres-only, comportamento idêntico. Commit: `refactor(dialeto): erro_readonly como predicado`.
+  ✅ **FEITA (2026-07-21, `9ba6166`).**
 
-Acréscimo: **0** (o teste do doctor vivo é a rede).
+Acréscimo: ~~**0**~~ → **+1**. O doctor vivo prova o caminho feliz, mas não o perigoso: um erro de
+banco que **não** é recusa de escrita não pode virar "somente-leitura confirmado". Como o `except`
+agora é largo, essa é a regressão que guarda o cadeado que falha aberta.
 
 > **Nota de sequência:** T2-T4 são o "prepara o contrato no Postgres, sem mudar comportamento" — o
 > mesmo padrão que a Fase 0 usou (refatora primeiro, adiciona o dialeto depois). Podem virar 1 ou 3
