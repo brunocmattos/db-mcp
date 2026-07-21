@@ -23,8 +23,12 @@ jobs:
           python-version: "3.12"
           enable-cache: true
 
+      # `--all-extras` NAO e' detalhe: sem o driver do MySQL o mypy nao resolve o
+      # `import mysql.connector` (medido: 2 erros import-not-found) e o
+      # `test_invariante_todo_dialeto[mysql]` se PULA — silenciando justamente o
+      # gate que existe pra pegar dialeto novo mal escrito.
       - name: Install dependencies (locked, reproducible)
-        run: uv sync --locked
+        run: uv sync --locked --all-extras
 
       - name: Ruff format
         run: uv run ruff format --check .
@@ -55,16 +59,18 @@ jobs:
           enable-cache: true
           cache-suffix: py${{ matrix.python-version }}
 
+      # `--all-extras`: sem o driver, `test_invariante_todo_dialeto[mysql]` se PULA
+      # (dialeto_ou_skip) e o gate contra dialeto mal escrito some em silencio.
       - name: Install dependencies (locked, reproducible)
-        run: uv sync --locked
+        run: uv sync --locked --all-extras
 
       # Neste job não há banco: os testes de integração/E2E/doctor se pulam sozinhos.
-      # O job `integration` abaixo os roda de verdade contra um Postgres real.
+      # Os jobs `integration-postgres` e `integration-mysql` os rodam de verdade.
       - name: Run tests (unit)
         run: uv run pytest -q
 
-  integration:
-    name: integration (ubuntu / py3.12)
+  integration-postgres:
+    name: integration postgres (ubuntu / py3.12)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -91,8 +97,10 @@ jobs:
           python-version: "3.12"
           enable-cache: true
 
+      # `--all-extras`: sem o driver, `test_invariante_todo_dialeto[mysql]` se PULA
+      # (dialeto_ou_skip) e o gate contra dialeto mal escrito some em silencio.
       - name: Install dependencies (locked, reproducible)
-        run: uv sync --locked
+        run: uv sync --locked --all-extras
 
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -106,10 +114,11 @@ jobs:
             psql -h localhost -U postgres -d demo -v ON_ERROR_STOP=1 -f "$f"
           done
 
-      # Com PG_* no ambiente, integração/E2E/doctor rodam de verdade (read-only,
+      # Com DB_* no ambiente, integração/E2E/doctor rodam de verdade (read-only,
       # allowlist, auth, os caminhos que tocam o banco).
       - name: Run full test suite
         env:
+          DIALETO: postgres
           DB_HOST: localhost
           DB_PORT: "5432"
           DB_DBNAME: demo
@@ -117,3 +126,78 @@ jobs:
           DB_PASSWORD: mcp_ro_demo
           DB_SSLMODE: disable
         run: uv run pytest -q
+
+      - name: Doctor (6/6 contra o Postgres real)
+        env:
+          DIALETO: postgres
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_DBNAME: demo
+          DB_USER: mcp_ro
+          DB_PASSWORD: mcp_ro_demo
+          DB_SSLMODE: disable
+        run: uv run db-mcp --dialect postgres doctor
+
+  # Espelho do job acima com o OUTRO banco. Os dois existem porque a suite e' a mesma:
+  # cada corpus de ataque se pula quando roda contra o dialeto que nao e' o dele, entao
+  # so' rodando as DUAS vezes o conjunto inteiro e' exercitado. E' o criterio de pronto
+  # da Fase 1: "suite verde com CADA banco".
+  integration-mysql:
+    name: integration mysql (ubuntu / py3.12)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: demo
+          MYSQL_ROOT_PASSWORD: root_demo
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot_demo"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies (locked, reproducible)
+        run: uv sync --locked --all-extras
+
+      - name: Install mysql client
+        run: sudo apt-get update && sudo apt-get install -y default-mysql-client
+
+      # Mesmo schema/seed/usuário read-only da demo local (demo/init-mysql/*.sql).
+      - name: Seed database
+        run: |
+          for f in demo/init-mysql/*.sql; do
+            mysql -h 127.0.0.1 -P 3306 -uroot -proot_demo demo < "$f"
+          done
+
+      - name: Run full test suite
+        env:
+          DIALETO: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_DBNAME: demo
+          DB_USER: mcp_ro
+          DB_PASSWORD: mcp_ro_demo
+        run: uv run pytest -q
+
+      - name: Doctor (6/6 contra o MySQL real)
+        env:
+          DIALETO: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_DBNAME: demo
+          DB_USER: mcp_ro
+          DB_PASSWORD: mcp_ro_demo
+        run: uv run db-mcp --dialect mysql doctor
