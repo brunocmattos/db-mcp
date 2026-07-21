@@ -210,6 +210,19 @@ pra **3** (`master`/`tempdb`/o próprio — o piso do SQL Server, não dá pra z
   `OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE` (passam pelo validador com raiz `Select`),
   `WAITFOR DELAY` (só `ParseError`), nome de 3 partes cross-database, e a ausência de reset de
   sessão. A tabela dos cadeados já tem a coluna dele — preenchê-la quando existir.
+- [ ] 🔴 **`STATEMENT_TIMEOUT_MS=0` desliga o timeout nos TRÊS dialetos, em silêncio.**
+  Achado medindo durante a Fase 2 (2026-07-21); **é do núcleo, não do SQL Server**, e a
+  decisão foi corrigir **depois** da Fase 2, em commit próprio, para não misturar escopo.
+  Medido contra os bancos vivos: `SET statement_timeout = 0` (Postgres) e
+  `SET max_execution_time = 0` (MySQL) são **aceitos e significam SEM limite**; no pymssql
+  `timeout=0` idem. Os três dialetos repassam o valor sem clamp
+  (`postgres.py:118`, `mysql.py:85`, `sqlserver.py:_conectar`), e `config.py:41` tem
+  `statement_timeout_ms: int = 5000` **sem validação nenhuma**. Um operador que escreva `0`
+  achando que é "o padrão" perde o guardrail contra query desgovernada.
+  ⚠️ **Não usar `Field(ge=1000)`** — amarraria o núcleo à granularidade de segundo de *um*
+  driver e proibiria 999 ms, que é legítimo no Postgres e no MySQL. O certo é barrar `0` e
+  negativos (`gt=0`). O `max(1, ...)` do `sqlserver.py` continua necessário de qualquer forma
+  (guardado por `test_sqlserver_timeout_para_o_driver_nunca_e_zero`).
 - [ ] **Tags retroativas `v0.2.0` e `v0.3.0`.** O CHANGELOG declara as três versões; só a
   `v0.4.0` existe no git. Baixa prioridade — exige achar os commits certos de cada release.
 - [ ] **Apagar `refactor/fase-0-multi-dialeto`** (local e remoto). Aponta pra `76b123d`, hoje
