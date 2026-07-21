@@ -6,7 +6,7 @@ no_ar: não
 atividade: ativo
 stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "sqlglot"]
 ultima_atividade: 2026-07-20
-proxima_acao: "Fase 1: T1+T2 feitas (branch refactor/fase-1-mysql, NAO pushada) — seguir com T3/T4 (Postgres-prep) e depois T5 (mysql.py), que exige medir o driver antes"
+proxima_acao: "Fase 1: T1+T2 feitas e pushadas (branch refactor/fase-1-mysql) — seguir com T3/T4 (Postgres-prep) e depois T5 (mysql.py), que exige medir o driver antes"
 repo: git+remote
 tags: [mcp, banco-de-dados, open-source, postgres]
 ---
@@ -15,9 +15,10 @@ tags: [mcp, banco-de-dados, open-source, postgres]
 ## Estado atual
 **Fase 0 CONCLUÍDA e mergeada em `main`. Fase 1 (MySQL) EM EXECUÇÃO — plano revisado; T1 e T2
 feitas e verificadas (2026-07-20).**
-O trabalho da Fase 1 vive na branch **`refactor/fase-1-mysql`** (forkada do `main`), com **2 commits
-NÃO-PUSHADOS**: `2e484a4` (T1) e `fa368b1` (T2). ⚠️ **Sem backup off-machine.** `main` e
-`refactor/fase-0-multi-dialeto` seguem em sincronia em `76b123d` (pushados). Working tree limpo.
+O trabalho da Fase 1 vive na branch **`refactor/fase-1-mysql`**, **pushada e em sincronia** em
+`7e11293` — T1 (`2e484a4`), T2 (`fa368b1`) e os docs, com backup off-machine. `main` e
+`refactor/fase-0-multi-dialeto` seguem em `76b123d` (pushados) — o **`main` público mostra a Fase 0 +
+o plano revisado**, não a WIP da Fase 1. Working tree limpo.
 As **12 tasks da Fase 0** estão feitas, mais as lacunas pós-fase.
 - ✅ **T1 — config neutro `db_*`** (`2e484a4`): `pg_* → db_*` na config e em TODOS os callers (config,
   postgres, doctor, testes, `ci.yml`, docs, `.env.demo`/`.env.example`). `db_port: int | None`
@@ -62,8 +63,7 @@ As **12 tasks da Fase 0** estão feitas, mais as lacunas pós-fase.
 **Próxima ação:** seguir a Fase 1 na branch `refactor/fase-1-mysql` — **T3** (doctor dialeto-aware) e
 **T4** (`erros_readonly` → predicado), que são Postgres-prep rápidas. Depois a **T5** (`dialetos/mysql.py`),
 que **exige MEDIR o driver antes de codar** (`pool_reset_session` de fato zera o `SET SESSION TRANSACTION
-READ ONLY`? é o cadeado que *falha aberta*). ⚠️ **Decidir também se a branch vai pro remoto** — os 2
-commits da T1/T2 estão só na máquina.
+READ ONLY`? é o cadeado que *falha aberta*).
 O [plano da Fase 1](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md) foi **revisado e corrigido**
 (2026-07-20 — Achado #1 do `%s`, T2 patchada; + notas de `get_lock`, autocommit×rollback no probe, e
 "medir o driver antes").
@@ -264,7 +264,7 @@ antes de o dialeto existir** — documentar capacidade inexistente é o oposto d
 - [x] **Decidido (2026-07-16): os docs internos são públicos** — spec, plano, `CLAUDE.md` e
   `worklog.md` versionados. Backup off-machine vale mais que arrumação estética.
 - [ ] **Revisão retroativa da Task 2** (o rename) — a formal nunca rodou.
-- [ ] **Fase 1 (MySQL) — EM EXECUÇÃO** na branch `refactor/fase-1-mysql` (⚠️ **não-pushada**).
+- [ ] **Fase 1 (MySQL) — EM EXECUÇÃO** na branch `refactor/fase-1-mysql` (pushada, em sincronia).
   Plano (`7096897`) **revisado e corrigido** em 2026-07-20 (Achado #1 do `%s` → T2 patchada; + notas
   de `get_lock`, autocommit×rollback e "medir o driver antes").
   **Feitas:** T1 ✅ `2e484a4` (config `db_*` + extra mysql) · T2 ✅ `fa368b1` (introspecção no Nucleo
