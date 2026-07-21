@@ -1,6 +1,6 @@
 [project]
 name = "db-mcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP server that gives read-only access to PostgreSQL, MySQL and SQL Server"
 readme = "README.md"
 license = "MIT"

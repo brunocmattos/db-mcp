@@ -17,7 +17,7 @@ bancos. Use o índice para pular pro que te interessa.
 3. [Como usar (e é fácil de configurar e de entender?)](#como-usar-e-é-fácil-de-configurar-e-de-entender)
 4. [Como foi montado por dentro e por que assim](#como-foi-montado-por-dentro-e-por-que-assim)
 5. [Quais seguranças ele tem, e existem brechas?](#quais-seguranças-ele-tem-e-existem-brechas)
-6. [Funciona com qualquer PostgreSQL?](#funciona-com-qualquer-postgresql)
+6. [Funciona com qualquer banco?](#funciona-com-qualquer-banco)
 7. [Vantagens sobre outros MCPs, funcionalidades e o que falta](#vantagens-sobre-outros-mcps-funcionalidades-e-o-que-falta)
 8. [Como criar um MCP do zero, e feito-à-mão vs pronto](#como-criar-um-mcp-do-zero-e-feito-à-mão-vs-pronto)
 9. [Dá pra adaptar para MySQL e SQL Server? (MCP "dinâmico")](#dá-pra-adaptar-para-mysql-e-sql-server-mcp-dinâmico)
@@ -95,7 +95,7 @@ Em qualquer situação em que alguém — pessoa ou automação — precisa **co
 
 O fio que costura todos os casos é o mesmo: **sempre leitura**. No momento em que a tarefa for escrever, alterar ou apagar algo, esta ferramenta não é a certa — e essa recusa é justamente o ponto dela.
 
-Uma observação honesta de escopo: o db-mcp fala **só** com PostgreSQL. Ele não conversa com MySQL nem com SQL Server. Em compensação, funciona com **qualquer** almoxarifado PostgreSQL — você aponta a ferramenta para o seu banco na configuração, e o código não conhece nenhum banco específico de antemão.
+Uma observação honesta de escopo: o db-mcp fala com **PostgreSQL** e **MySQL**. Ainda não fala SQL Server (está planejado). Em compensação, funciona com **qualquer** almoxarifado dessas duas marcas — você aponta a ferramenta para o seu banco na configuração, e o código não conhece nenhum banco específico de antemão.
 
 ## Como usar (e é fácil de configurar e de entender?)
 
@@ -168,7 +168,7 @@ Sim, e isto foi feito de propósito. O projeto é, deliberadamente, muito bem do
 - **docs 01 a 04** — instalação, preparar o banco, arquitetura e solução de problemas, cada um num arquivo.
 - **Este próprio documento ELI5** — a explicação para leigos, que você está lendo.
 
-E, dentro do código, mais ajuda: **docstrings** (bilhetinhos em português explicando o que cada pedaço faz), **tipos** (marcações que dizem que tipo de dado entra e sai de cada função, checadas de forma rigorosa por uma ferramenta), e **testes legíveis** — são 119 testes que passam, e um teste bem escrito funciona como um exemplo vivo de "quando você faz X, acontece Y".
+E, dentro do código, mais ajuda: **docstrings** (bilhetinhos em português explicando o que cada pedaço faz), **tipos** (marcações que dizem que tipo de dado entra e sai de cada função, checadas de forma rigorosa por uma ferramenta), e **testes legíveis** — são 229 testes que passam, e um teste bem escrito funciona como um exemplo vivo de "quando você faz X, acontece Y".
 
 Na prática, isso quer dizer que se você jogar este repositório numa IA e perguntar "o que este projeto faz?", ela consegue **montar o quadro inteiro rápido**: a estrutura é pequena, os nomes são descritivos, e há texto explicativo em toda camada — do README de topo até o comentário na função. O projeto foi escrito para ser lido, não só executado. Essa é uma das qualidades reais dele.
 
@@ -182,7 +182,7 @@ O **núcleo** é o coração do sistema: são as regras de segurança mais o ace
 
 Por cima do núcleo tem uma **casca fina**. Essa casca é o pedaço que sabe conversar no idioma MCP — o idioma que a IA usa pra pedir coisas ao garçom. A casca só faz uma coisa: recebe o pedido da IA, entrega pro núcleo, e devolve a resposta. Ela não tem regra nenhuma dentro dela. No código, essa casca é um arquivo só, o `server.py`.
 
-Por que separar assim? Porque dá pra testar o núcleo inteiro sem precisar ligar o servidor. As regras (aceitar ou recusar um pedido, cortar o tamanho da resposta, limitar o ritmo) são testadas isoladas, como se você testasse a fechadura na bancada antes de instalar na porta. É por isso que o projeto tem 110 testes de unidade rodando sem subir nada. O núcleo não depende da casca pra funcionar; a casca é trocável.
+Por que separar assim? Porque dá pra testar o núcleo inteiro sem precisar ligar o servidor. As regras (aceitar ou recusar um pedido, cortar o tamanho da resposta, limitar o ritmo) são testadas isoladas, como se você testasse a fechadura na bancada antes de instalar na porta. É por isso que o projeto tem 191 testes de unidade rodando sem subir banco nenhum. O núcleo não depende da casca pra funcionar; a casca é trocável.
 
 ### Dois lugares pra guardar coisas: segredo e ajuste
 
@@ -209,9 +209,9 @@ Nada aqui foi por acaso. Cada peça resolve um problema específico:
 
 Este é o ponto que o projeto faz questão de deixar honesto. A segurança não está apoiada num muro só. São **três cadeados em série** — a ideia de "defesa em profundidade": se um falha, o próximo ainda segura.
 
-1. **O usuário do banco é fisicamente somente-leitura.** No próprio PostgreSQL, esse usuário só recebeu permissão de olhar (`GRANT SELECT`) e o banco está configurado pra tratar toda transação dele como leitura. Esta é a tranca **mais forte de todas**, porque ela **não depende do código** do programa. Mesmo que o segurança da porta cochile, o almoxarifado em si se recusa a ser rasurado.
+1. **O usuário do banco é fisicamente somente-leitura.** No próprio banco, esse usuário só recebeu permissão de olhar (`GRANT SELECT`). Esta é a tranca **mais forte de todas**, porque ela **não depende do código** do programa. Mesmo que o segurança da porta cochile, o almoxarifado em si se recusa a ser rasurado. (Com uma diferença importante entre as marcas de banco — veja o quadro logo abaixo.)
 
-2. **A rede só deixa esse usuário entrar de endereços conhecidos.** Uma regra do banco (o `pg_hba.conf`) só aceita conexão desse usuário vindo dos computadores certos. Quem está fora não chega nem na porta.
+2. **A rede só deixa esse usuário entrar de endereços conhecidos.** Uma regra do banco (o `pg_hba.conf` no PostgreSQL; o endereço embutido no próprio nome do usuário, no MySQL) só aceita conexão vindo dos computadores certos. Quem está fora não chega nem na porta.
 
 3. **A aplicação revista o pedido.** É todo o núcleo que descrevemos: o segurança sqlglot, a lista de mesas permitidas (a allowlist), o corte automático no número de linhas, o teto no tamanho da resposta, o controle de ritmo. E, quando o pedido volta, a conexão é **limpa** com um comando que apaga qualquer rastro (`DISCARD ALL`), pra que nada que um cliente fez sobre na conexão e vaze pro próximo cliente que a reutilizar.
 
@@ -228,9 +228,9 @@ Dois furos conhecidos ficam **documentados de propósito**, porque esconder prob
 
 Fora esses dois pontos, não há outro furo conhecido — e eles ficam à mostra de propósito, porque esconder limite não é honestidade.
 
-### Vale pra qualquer PostgreSQL
+### Vale pra qualquer PostgreSQL ou MySQL
 
-Por fim, uma escolha de projeto: o programa **não conhece banco nenhum específico**. Você aponta pro seu PostgreSQL pela configuração, e ele funciona — seja qual for o seu banco. O código não tem nenhuma tabela ou empresa embutida. A contrapartida honesta é que ele fala **só PostgreSQL** hoje. Não fala MySQL, não fala SQL Server. É genérico dentro do mundo PostgreSQL, e só dentro dele.
+Por fim, uma escolha de projeto: o programa **não conhece banco nenhum específico**. Você aponta pro seu PostgreSQL pela configuração, e ele funciona — seja qual for o seu banco. O código não tem nenhuma tabela ou empresa embutida. A contrapartida honesta é que ele fala **PostgreSQL e MySQL** hoje — ainda não fala SQL Server.
 
 ## Quais seguranças ele tem, e existem brechas?
 
@@ -242,9 +242,13 @@ Para garantir isso, o projeto não confia em um único mecanismo. Ele usa três 
 
 Este é o cadeado mais importante, e ele mora dentro do próprio banco, não no nosso código.
 
-Quando você prepara o banco, cria um usuário exclusivo para a IA. Esse usuário recebe uma permissão chamada `GRANT SELECT`, que quer dizer "só pode consultar". E recebe uma trava a mais, `default_transaction_read_only = on`, que faz o PostgreSQL recusar qualquer tentativa de escrita, na marra. É o "pode olhar as fichas, não pode rasurar nem arrancar nenhuma", só que imposto pelo próprio almoxarifado.
+Quando você prepara o banco, cria um usuário exclusivo para a IA. Esse usuário recebe uma permissão chamada `GRANT SELECT`, que quer dizer "só pode consultar". É o "pode olhar as fichas, não pode rasurar nem arrancar nenhuma", imposto pelo próprio almoxarifado.
 
 Por que este é o mais forte? Porque não depende do nosso programa acertar nada. Mesmo que todo o resto falhasse, o banco continuaria recusando escrita sozinho. O manual do projeto (`docs/02-preparar-o-banco.md`) ensina a montar esse usuário passo a passo.
+
+**Aqui vem uma diferença que o projeto não esconde.** No PostgreSQL dá para pendurar no usuário uma trava extra (`default_transaction_read_only = on`) que faz o banco tratar **toda** conversa daquele usuário como leitura — para sempre, sem depender de mais nada. **O MySQL não tem isso.** Lá existe uma trava parecida, mas que vale só para a conexão da vez, e é o **nosso programa** que precisa ligá-la toda vez que pega uma conexão emprestada. Nós ligamos — e temos um teste automático que garante que continuará sendo ligado —, mas é código nosso, não garantia do almoxarifado.
+
+Tradução prática: **no MySQL, escolher direitinho quais fichas o crachá pode ver (`GRANT SELECT` só nas tabelas certas) não é capricho, é a proteção principal.** No PostgreSQL isso é a segunda camada; no MySQL, é a primeira.
 
 ### Cadeado nº 2: só entra quem vem do endereço certo
 
@@ -283,9 +287,9 @@ O motivo é sincero: contra um usuário de banco que tenha permissões amplas, a
 
 Por isso a regra de ouro do projeto: **o cadeado mais forte é o do próprio banco; a aplicação é a segunda tranca.** O isolamento realmente sólido vem do cadeado nº 1, quando você concede ao usuário da IA permissão de leitura apenas nas tabelas que ele deve ver, e nada mais, e ainda tira dele o direito de executar funções perigosas. Aí o próprio PostgreSQL recusa tudo o que estiver fora, por mais esperto que seja o pedido. O nosso programa ajuda, filtra e organiza, mas quem dá a palavra final, e deve dar, é o banco.
 
-## Funciona com qualquer PostgreSQL?
+## Funciona com qualquer banco?
 
-Resposta curta: sim. Contanto que seja PostgreSQL, funciona.
+Resposta curta: sim, contanto que seja **PostgreSQL ou MySQL**. SQL Server ainda não.
 
 O motivo é que o programa não vem com nenhum banco embutido. Ele não conhece "o seu banco". Você é quem aponta para onde ele deve ir, escrevendo o endereço num arquivo de configuração. É como um garçom que não trabalha num restaurante fixo: você diz o endereço e ele vai servir naquele lugar.
 
@@ -294,7 +298,7 @@ O motivo é que o programa não vem com nenhum banco embutido. Ele não conhece 
 Os dados de conexão ficam num arquivo chamado `.env` (pense nele como uma ficha de contato guardada num cofrinho, porque ali vai a senha). São seis informações:
 
 - `DB_HOST` — o endereço do banco (o "prédio" onde ele mora na rede).
-- `DB_PORT` — a porta de entrada nesse endereço (o padrão do PostgreSQL é a `5432`).
+- `DB_PORT` — a porta de entrada nesse endereço (o padrão do PostgreSQL é a `5432`; a do MySQL, `3306`). Se você deixar em branco, o programa usa a porta certa para o banco escolhido.
 - `DB_DBNAME` — o nome do banco específico (um mesmo servidor pode guardar vários almoxarifados; você escolhe qual).
 - `DB_USER` e `DB_PASSWORD` — o crachá e a senha com que o programa se identifica.
 - `DB_SSLMODE` — se a conversa com o banco vai por um canal fechado à prova de bisbilhoteiro (por padrão vem como `prefer`, que usa o canal fechado quando o banco oferece).
@@ -315,7 +319,7 @@ Sem esses dois passos, a ferramenta de autodiagnóstico (o `doctor`) acusa o pro
 
 - Por baixo, o programa usa uma peça chamada **psycopg 3** (o "tradutor" que sabe conversar em PostgreSQL). É ela que fala o "idioma" do banco — e é por isso que o mesmo programa serve para qualquer PostgreSQL para onde você apontar, sem conhecer nenhum banco específico.
 - Funciona bem com bancos **na nuvem** — Amazon RDS, Google Cloud SQL e parecidos — com uma condição honesta: você precisa conseguir **criar aquele usuário de leitura** e **alcançar o banco pela rede** (o que às vezes exige liberar um IP ou ligar uma VPN). Se você consegue essas duas coisas, funciona.
-- Limite claro: hoje ele fala **só PostgreSQL**. Não serve para MySQL, nem para SQL Server, nem para outros bancos. É genérico dentro do mundo PostgreSQL — não fora dele.
+- Limite claro: hoje ele fala **PostgreSQL e MySQL**. Ainda não serve para SQL Server nem para outros bancos.
 
 ## Vantagens sobre outros MCPs, funcionalidades e o que falta
 
@@ -343,14 +347,14 @@ O db-mcp escolheu deliberadamente ser o contrário de um canivete suíço: uma f
 
 **Honestidade escrita na documentação.** Este projeto não promete ser inviolável. Ele diz, com todas as letras, onde ainda há frestas: dá para descobrir a existência e o tamanho de tabelas que estão fora da lista (a introspecção não passa pela allowlist), e um resultado de uma linha gigantesca pode inchar a memória por um instante antes de ser barrado. Isso está documentado de propósito. É raro um projeto apontar os próprios limites assim.
 
-**Testes e verificação contínua.** São 119 testes automáticos (110 de unidade + 9 de integração contra um Postgres real), todos passando, mais checagens de qualidade de código rodando sozinhas a cada mudança, no Linux e no Windows. É a diferença entre um produto cuidado e um script largado — justamente o que faltou ao servidor de referência abandonado.
+**Testes e verificação contínua.** São 229 testes automáticos (191 de unidade + 38 de integração contra bancos **reais** — a suíte roda inteira contra um PostgreSQL e depois contra um MySQL), todos passando, mais checagens de qualidade de código rodando sozinhas a cada mudança, no Linux e no Windows. É a diferença entre um produto cuidado e um script largado — justamente o que faltou ao servidor de referência abandonado.
 
 ### Onde os outros levam vantagem (as desvantagens, sem enrolação)
 
 Ser afiado numa coisa só custa caro em outras. Sendo honesto:
 
 - **Só lê, não escreve.** Se você precisa que a IA insira, corrija ou apague dados, este projeto não serve. O Postgres MCP Pro serve. Aqui a incapacidade de escrever é o produto, não uma falha — mas é uma limitação real.
-- **Só fala PostgreSQL.** Não conversa com MySQL, SQL Server nem outros bancos. Vários MCPs concorrentes falam vários dialetos.
+- **Fala PostgreSQL e MySQL, mas não SQL Server** (nem Oracle, nem SQLite). Alguns MCPs concorrentes cobrem mais dialetos.
 - **Não analisa desempenho.** Ele não tem o **EXPLAIN** (o recurso do Postgres que mostra o "plano de execução" — o passo a passo que o banco pretende seguir para responder, útil para descobrir por que uma consulta está lenta). O Postgres MCP Pro faz isso e ainda sugere melhorias. Este aqui, não.
 - **Não expõe métricas Prometheus.** Prometheus é um sistema muito usado para monitorar programas em produção, coletando números como "quantas consultas por segundo" num painel. Este projeto não oferece esse encaixe pronto (ele registra tudo num arquivo de auditoria, o que é mais simples e menos sofisticado).
 - **Um banco por instância.** Cada cópia rodando fala com um único banco. Para atender três bancos, você sobe três cópias. Alguns concorrentes lidam com vários de uma vez.
@@ -467,7 +471,7 @@ Chegamos à decisão central. Existem dois caminhos pra ter um MCP funcionando.
 
 - **Controle total.** *Você* escreveu o cardápio. A IA aqui **não pode** rasurar nem arrancar ficha nenhuma — o MCP é somente-leitura (pode olhar, não pode escrever). Isso não é uma promessa no folheto: são três cadeados sobrepostos, sendo o mais forte um usuário do banco que, no próprio banco, só recebeu permissão de leitura. Mesmo se o código tivesse um furo, o banco recusaria a escrita.
 - **Segurança feita pro seu risco.** Tem um **segurança na porta que revista cada pedido** antes de deixar entrar (um validador que lê o SQL, aceita só uma busca de leitura e barra comandos perigosos). Tem a **lista de mesas que o garçom pode servir** (a allowlist de tabelas). Tem teto de linhas, teto de tamanho de resposta, e limite de pedidos por cliente. Nada disso vem "de fábrica" num MCP genérico — foi desenhado pro que *este* uso precisa.
-- **Auditabilidade.** Você pode conferir tudo. São 119 testes automáticos passando, ferramentas de qualidade de código limpas, e um comando `doctor` que roda seis checagens antes de usar (a configuração está certa? o banco responde? a senha funciona? ele está *mesmo* em modo leitura? a allowlist existe? a resposta é rápida?). Um estranho da prateleira não te entrega esse raio-x.
+- **Auditabilidade.** Você pode conferir tudo. São 229 testes automáticos passando, ferramentas de qualidade de código limpas, e um comando `doctor` que roda seis checagens antes de usar (a configuração está certa? o banco responde? a senha funciona? ele está *mesmo* em modo leitura? a allowlist existe? a resposta é rápida?). Um estranho da prateleira não te entrega esse raio-x.
 
 ### A parte honesta
 
@@ -542,9 +546,9 @@ Aqui a honestidade importa, porque é onde o trabalho se multiplica.
 
 **Os catálogos têm suas diferenças.** Descobrir "quais colunas essa tabela tem" se apoia no `information_schema`, que existe nos três bancos — então a base viaja. Mas cada engine tem suas gírias (o que conta como "schema", como os tipos aparecem, quais filtros de sistema aplicar), então cada consulta ainda precisa ser revista e testada por banco. É menos que reescrever do zero, mas não é copiar e colar.
 
-**As funções perigosas são outras.** O segurança mantém uma lista negra de funções que precisam ser barradas — comandos que, mesmo num pedido de leitura, conseguem ler arquivos do servidor, abrir conexões de rede ou travar o sistema. Hoje essa lista é toda de funções Postgres (`pg_read_file`, `pg_sleep`, `dblink` e companhia, em `guardrails/sql.py`). Cada banco traz o seu próprio arsenal a bloquear — e aqui mora um alerta grande: o SQL Server tem uma função tristemente famosa chamada `xp_cmdshell`, capaz de **rodar comandos do sistema operacional** a partir de dentro do banco. O MySQL tem seus próprios truques, como escrever arquivos no disco do servidor. Montar a lista negra certa para cada banco exige estudo específico, e errar aqui abre buraco de segurança.
+**As funções perigosas são outras.** O segurança mantém uma lista negra de funções que precisam ser barradas — comandos que, mesmo num pedido de leitura, conseguem ler arquivos do servidor, abrir conexões de rede ou travar o sistema. Cada dialeto traz a sua lista — as de Postgres (`pg_read_file`, `pg_sleep`, `dblink`) vivem em `dialetos/postgres.py`, as de MySQL (`load_file`, `sleep`, `benchmark`, os locks nomeados) em `dialetos/mysql.py`. Cada banco traz o seu próprio arsenal a bloquear — e aqui mora um alerta grande: o SQL Server tem uma função tristemente famosa chamada `xp_cmdshell`, capaz de **rodar comandos do sistema operacional** a partir de dentro do banco. O MySQL tem seus próprios truques, como escrever arquivos no disco do servidor. Montar a lista negra certa para cada banco exige estudo específico, e errar aqui abre buraco de segurança.
 
-**O teste e a auditoria triplicam.** Hoje o projeto tem 119 testes verdes — e parte deles, a suíte de integração, roda contra um PostgreSQL de verdade. Passar a atender três bancos significa, na prática, provar o mesmo comportamento três vezes, contra três bancos reais. É trabalho honesto de garantia, não enfeite.
+**O teste e a auditoria multiplicam.** Provar o mesmo comportamento contra cada banco significa rodar a suíte inteira contra cada um deles, de verdade. **Isso já é realidade para dois:** o CI sobe um PostgreSQL e um MySQL e roda tudo contra os dois, cada um com o seu próprio corpus de ataque. Falta o terceiro. É trabalho honesto de garantia, não enfeite.
 
 ### Veredito
 
