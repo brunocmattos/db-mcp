@@ -6,7 +6,7 @@ no_ar: não
 atividade: ativo
 stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "mysql-connector", "sqlglot"]
 ultima_atividade: 2026-07-21
-proxima_acao: "Fase 1 (MySQL) CONCLUÍDA e verificada na branch refactor/fase-1-mysql (pushada). Decidir o merge pra main — o repo é público e o main ainda mostra só a Fase 0 — e depois planejar a Fase 2 (SQL Server)"
+proxima_acao: "Fase 1 (MySQL) mergeada no main público e tagueada v0.4.0 (CI 7/7 verde). Próximo: planejar a Fase 2 (SQL Server) — herda tsql≠sqlserver, OPENQUERY/OPENROWSET, WAITFOR DELAY e a ausência de reset de sessão"
 repo: git+remote
 tags: [mcp, banco-de-dados, open-source, postgres, mysql]
 ---
@@ -16,11 +16,12 @@ tags: [mcp, banco-de-dados, open-source, postgres, mysql]
 **Fase 1 (MySQL) CONCLUÍDA e verificada em 2026-07-21.** O produto fala com **dois bancos**:
 `db-mcp --dialect {postgres,mysql} doctor` fecha **6/6** nos dois. Versão **0.4.0**.
 
-O trabalho vive na branch **`refactor/fase-1-mysql`**, pushada e em sincronia em `d00a0bd`.
-⚠️ **`main` segue em `76b123d`** (só a Fase 0 + o plano) — o repo é **público**, então o
-`main` ainda não mostra o MySQL. **Decidir o merge é a próxima ação.**
+**Tudo vive no `main`.** A Fase 1 foi mergeada (`--no-ff`, `2817312`) e tagueada **`v0.4.0`**
+em 2026-07-21; o CI do `main` fechou **7/7** (lint+types, testes em ubuntu/windows × py3.12/3.13,
+integração Postgres e MySQL com `doctor` 6/6 contra banco real). As branches de fase foram
+apagadas — `refactor/fase-1-mysql` já não existe. Repo público **em dia** com o que foi entregue.
 
-Medido com os containers **recriados do zero** (`down -v` antes):
+Medido localmente com os containers de demo (e reproduzido no CI):
 
 | | sem banco | Postgres | MySQL |
 |---|---|---|---|
@@ -157,17 +158,22 @@ Por isso `_PoolMySQL.connection()` reaplica **a cada checkout** — e
   deixou de conhecer Postgres; contrato `Dialeto` + `dialetos/postgres.py`; 3 defeitos do spec
   corrigidos com regressão; fiação e2e. Detalhe no
   [plano](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md).
-- [x] **Fase 1 — MySQL (2026-07-20 e 07-21).** 10 tasks, `2e484a4..d00a0bd`. Config `db_*` →
+- [x] **Fase 1 — MySQL (2026-07-20 e 07-21).** 10 tasks, `2e484a4..950843c`. Config `db_*` →
   introspecção no `Nucleo` → doctor dialeto-aware → `erro_readonly` predicado →
   **`dialetos/mysql.py`** → corpus de ataque → demo MySQL → CI com os dois bancos → docs honestos
   → verificação final. Resultados medidos no fim do
   [plano](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md).
-- [ ] 🎯 **Decidir o merge da `refactor/fase-1-mysql` pro `main`.** O repo é público e o `main`
-  mostra só a Fase 0 — quem chega no GitHub não vê o MySQL. Fase 1 está verde e pushada.
-- [ ] **Fase 2 — SQL Server.** Plano próprio. Herda os gotchas do `tsql`/`sqlserver`,
+- [x] **Merge da Fase 1 pro `main` (2026-07-21).** `--no-ff` em `2817312`, tag **`v0.4.0`**,
+  CI do `main` **7/7**. Branches de fase apagadas (local e remoto). O repo público passou a
+  mostrar o MySQL.
+- [ ] 🎯 **Fase 2 — SQL Server.** Plano próprio. Herda os gotchas do `tsql`/`sqlserver`,
   `OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE` (passam pelo validador com raiz `Select`),
   `WAITFOR DELAY` (só `ParseError`), nome de 3 partes cross-database, e a ausência de reset de
   sessão. A tabela dos cadeados já tem a coluna dele — preenchê-la quando existir.
+- [ ] **Tags retroativas `v0.2.0` e `v0.3.0`.** O CHANGELOG declara as três versões; só a
+  `v0.4.0` existe no git. Baixa prioridade — exige achar os commits certos de cada release.
+- [ ] **Apagar `refactor/fase-0-multi-dialeto`** (local e remoto). Aponta pra `76b123d`, hoje
+  ancestral do `main` — está totalmente incorporada e é peso morto.
 - [ ] **Revisão retroativa da Task 2 da Fase 0** (o rename) — a formal nunca rodou.
 - [ ] **Escrita configurável** — spec próprio. Ver o princípio acima.
 - [ ] Todo commit tem autor `bruno.outcore@guarida.com.br`, ligando a identidade pública do GitHub
