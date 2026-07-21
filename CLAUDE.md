@@ -169,6 +169,12 @@ pra **3** (`master`/`tempdb`/o próprio — o piso do SQL Server, não dá pra z
 
 ### Gotchas vivos
 - **Repo PÚBLICO** — o único do portfólio. Pense antes de commitar.
+- 🪤 **`docker compose --profile X down -v` derruba TAMBÉM os serviços sem `profiles:`.**
+  Medido em 2026-07-21: `--profile sqlserver down -v` **removeu o container do Postgres**, que
+  não tem `profiles:` e por isso está sempre no conjunto ativo. Sem volume nomeado, os dados
+  foram embora (os scripts de init reconstruíram tudo, então o estrago foi nulo — mas foi sorte
+  do demo, não desenho). Para derrubar **só** um perfil, nomeie o serviço:
+  `docker compose rm -sfv sqlserver`.
 - 🪤 **`"sqlserver"` NÃO é nome de dialeto do sqlglot — lá se escreve `tsql`** (medido), e
   `"sqlserver"` é exatamente a string já no `Literal` do `config.py`. Quem copiar o padrão do
   `postgres.py`/`mysql.py` (onde `nome == sqlglot_dialeto` por coincidência) leva `ValueError` em
