@@ -191,6 +191,16 @@ class DialetoMySQL:
         try:
             yield cur
         finally:
+            # 🔴 O `consume_results` NÃO é higiene opcional — sem ele o MySQL quebra no
+            # caminho MAIS COMUM. MEDIDO: fechar cursor com linhas por ler levanta
+            # `InternalError("Unread result found")`, e o `cnx.close()` seguinte falha
+            # com "MySQL Connection not available" — mascarando o erro original E
+            # VAZANDO a conexão do pool (que nunca é devolvida).
+            # E sobra por ler sempre que a consulta tem mais linhas que o teto: o
+            # `db.executar` detecta truncagem justamente com fetchmany(n) + fetchone().
+            # O psycopg descarta sozinho; o mysql-connector exige que se drene.
+            with suppress(Exception):
+                conn.consume_results()
             cur.close()
 
     def sql_amostra(self, tabela: str, n: int) -> str:

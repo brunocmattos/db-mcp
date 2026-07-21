@@ -45,9 +45,10 @@ async def test_ferramentas_ponta_a_ponta():
 
         # introspecção ponta a ponta (agnóstica ao schema do banco configurado)
         assert isinstance(_payload(await client.call_tool("listar_schemas", {})), list)
-        tabelas = _payload(await client.call_tool("listar_tabelas", {"schema": "public"}))
+        # sem argumento: o schema padrao vem do DIALETO (no MySQL e o database, nao "public")
+        tabelas = _payload(await client.call_tool("listar_tabelas", {}))
         assert isinstance(tabelas, list)
-        if tabelas:  # se houver alguma tabela em public, exercita descrever_tabela + amostra
+        if tabelas:  # se houver alguma tabela no schema padrao, exercita descrever_tabela + amostra
             nome = tabelas[0]["table_name"]
             cols = _payload(await client.call_tool("descrever_tabela", {"tabela": nome}))
             assert isinstance(cols, list) and cols
