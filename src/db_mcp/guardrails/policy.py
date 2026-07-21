@@ -111,15 +111,23 @@ def injetar_limit(sql: str, teto: int, dialeto: str) -> str:
     `dialeto` é o dialeto do sqlglot ("postgres" | "mysql" | "tsql"): o SQL tem que SAIR na
     sintaxe do banco alvo, e no T-SQL não existe `LIMIT` — o sqlglot emite `TOP`. O parse
     e a emissão usam o mesmo dialeto de propósito: são a leitura e a escrita da mesma query.
+
+    🚨 MEDIDO contra SQL Server real (T6): os dois `return` abaixo reemitem via
+    `arvore.sql(dialect=dialeto)` em vez de devolver `sql` cru. O sqlglot faz parse
+    leniente — aceita `LIMIT n` mesmo com `read="tsql"` — então uma query com `LIMIT`
+    (sintaxe alheia ao T-SQL) e limite dentro do teto batia no fast-path antigo e saía
+    INTOCADA: o pymssql recusava com "Incorrect syntax near '1'" porque `LIMIT` não
+    existe no SQL Server. Reemitir sempre custa uma formatação cosmética a mais em
+    Postgres/MySQL (mesmo texto, medido) e corrige o caso tsql sem duplicar o caminho.
     """
     arvore = cast(exp.Query, sqlglot.parse_one(sql, read=dialeto))
     limite = arvore.args.get("limit")
     if isinstance(limite, exp.Limit):
         valor = limite.expression
         if isinstance(valor, exp.Literal) and valor.is_int and int(valor.name) <= teto:
-            return sql
+            return arvore.sql(dialect=dialeto)
     elif isinstance(limite, exp.Fetch):
         contagem = limite.args.get("count")
         if isinstance(contagem, exp.Literal) and contagem.is_int and int(contagem.name) <= teto:
-            return sql
+            return arvore.sql(dialect=dialeto)
     return arvore.limit(teto).sql(dialect=dialeto)
