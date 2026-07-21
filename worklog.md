@@ -1,5 +1,46 @@
 # Worklog — db-mcp
 
+## 2026-07-20 · Desenvolvimento — Revisão do plano da Fase 1 + T1 e T2 executadas
+**O quê:** "Vamos continuar" — o Bruno escolheu os **3 escopos**: revisar o plano da Fase 1, arrumar as
+divergências dos docs, e executar a T1.   ·   **Objetivo:** plano confiável, docs verdadeiros, e a
+Fase 1 saindo do papel.
+
+**Feito:**
+- **🔎 Revisão MEDIDA do plano da Fase 1 — 1 furo real + 2 detalhes (`76b123d`).** O headline: o
+  **`%s` NÃO parseia no dialeto `mysql`** (sqlglot 30.12: vira `exp.Mod` → `ParseError`), então
+  `validar()`/`injetar_limit()` **derrubariam toda a introspecção** no MySQL. A T9 da Fase 0 manteve o
+  validador ligado nessa rota porque *"o `%s` parseia"* — verdade **só no Postgres**: era sorte, não
+  garantia, e o plano herdou a sorte como se fosse contrato. Patchei a T2 do plano. Também achei: a
+  lista de `funcs_proibidas` do MySQL é *escolhida*, não medida-completa (`get_lock` é função **padrão**,
+  vira `exp.Anonymous` e passaria; `sys_exec`/`sys_eval` são UDFs não-padrão); e T5×T7 se contradizem
+  (`conectar_doctor` com `autocommit=True` × probe "rollback-able" — `rollback()` é no-op sob autocommit).
+  **Confirmado bom:** `INTO OUTFILE`/`DUMPFILE` dão `ParseError` mesmo — a regressão da T6 se justifica.
+- **🧹 Divergências dos docs corrigidas + `main` público em dia (`76b123d`).** O `/abrir` pegou 3
+  afirmações falsas: "+1 commit não-pushado" (era 0), "`main` == fase-0" (estava 2 atrás) e "19 commits
+  atrás" nas Pendências (eram 2). Corrigidas; `main` ff'd `42d1ef4..76b123d` e **pushado** (aprovado pelo
+  Bruno). Branch `refactor/fase-1-mysql` criada a partir do `main` atualizado.
+- **✅ T1 — config neutro `db_*` (`2e484a4`).** `pg_* → db_*` em **22 arquivos** (config, postgres,
+  doctor, 8 testes, `ci.yml`, docs, `.env.demo`/`.env.example`, `uv.lock`). `db_port: int | None`
+  (5432≠3306 — cada dialeto aplica a sua). Extra opcional `mysql = mysql-connector-python>=9`.
+  Verificado: mypy/ruff limpos, 130/24 sem banco, **doctor 6/6 e 154/0 com o demo Docker**.
+- **✅ T2 — introspecção desce pro `Nucleo` (`fa368b1`), com o fix do `%s`.** As 4 tools delegam a
+  `Nucleo.introspectar`, que monta o SQL do novo `sql_introspecao` (do dialeto) **dentro da trilha
+  auditada** e resolve o schema default por `dialeto.schema_padrao`. `consultar` ganhou
+  `validar_sql: bool = True`; a introspecção chama com `False` (SQL fixo, identificador via `params`).
+  **Fecha 2 itens do Backlog** (recusa auditada + tools testáveis). 135/24 sem banco, **159/0 com banco**.
+- **🐛 Bug meu, pego pela suíte COM banco.** `params=()` (schemas, sem binds) fazia o psycopg interpolar
+  o `LIKE 'pg_%'` e estourar (`only '%s' … allowed as placeholders`). Vazio → `None` (sem binds = sem
+  interpolação). **A suíte sem banco passava** — só o e2e contra o Postgres vivo pegou. Regressão em teste.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção** (`no_ar: não`, nenhum usuário). ⚠️ **A branch
+`refactor/fase-1-mysql` NÃO foi pushada** — os 2 commits da T1/T2 estão só nesta máquina, **sem backup
+off-machine**. 📌 O repo é **público**: o `main` já mostra a Fase 0 + o plano revisado. 📌 A skill externa
+`setup-db-mcp` (fora do repo) ainda escreve chaves `pg_*` → vai gerar config quebrada até ser atualizada.
+
+**Próximo:** T3 (doctor dialeto-aware) e T4 (`erros_readonly` → predicado), Postgres-prep rápidas; depois
+a **T5 (`dialetos/mysql.py`)**, que **exige medir o `pool_reset_session` do driver antes de codar** — é o
+cadeado que *falha aberta*. E decidir se a branch vai pro remoto.
+
 ## 2026-07-20 · Manutenção — Merge de main, sessões paralelas, e plano da Fase 1
 **O quê:** fechar o ciclo da Fase 0 (merge pro `main` público) e dar início à Fase 1 escrevendo o
 plano.   ·   **Objetivo:** repo público mostrando a Fase 0, lacunas fechadas, e um plano da Fase 1
