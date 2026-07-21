@@ -1,11 +1,16 @@
-# Postgres de demonstração: já sobe semeado e com o usuário read-only mcp_ro pronto.
-# Serve pra experimentar o MCP sem apontar pro seu banco.
+# Bancos de demonstração: já sobem semeados e com o usuário read-only mcp_ro pronto.
+# Servem pra experimentar o MCP sem apontar pro seu banco.
 #
-#   docker compose up -d
-#   uv run db-mcp --env .env.demo doctor   # deve ficar tudo verde
-#   uv run db-mcp --env .env.demo           # sobe o servidor (stdio)
+#   docker compose up -d                              # Postgres (default)
+#   uv run db-mcp --env .env.demo doctor              # deve ficar tudo verde
+#   uv run db-mcp --env .env.demo                     # sobe o servidor (stdio)
 #
-# Porta 5433 no host pra não colidir com um Postgres que você já tenha na 5432.
+#   docker compose --profile mysql up -d              # MySQL (opcional)
+#   uv run db-mcp --env .env.demo-mysql doctor
+#
+# O MySQL fica atrás de um profile pra `docker compose up -d` continuar subindo só o
+# Postgres — quem só usa um banco não paga o outro. Portas 5433/3307 no host pra não
+# colidir com um Postgres/MySQL que você já tenha nas portas padrão.
 
 services:
   db:
@@ -24,3 +29,20 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+
+  db-mysql:
+    image: mysql:8.4
+    container_name: db-mcp-demo-mysql
+    profiles: ["mysql"]
+    environment:
+      MYSQL_DATABASE: demo
+      MYSQL_ROOT_PASSWORD: root_demo
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./demo/init-mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot_demo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

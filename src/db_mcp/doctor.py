@@ -33,9 +33,12 @@ class PularChecagem(Exception):
 class Contexto:
     """Estado compartilhado: uma checagem preenche, as seguintes reutilizam."""
 
-    def __init__(self, env_file: str | None, yaml_file: str) -> None:
+    def __init__(
+        self, env_file: str | None, yaml_file: str, dialeto_override: str | None = None
+    ) -> None:
         self.env_file = env_file
         self.yaml_file = yaml_file
+        self.dialeto_override = dialeto_override  # o --dialect da linha de comando
         self.settings: Settings | None = None  # preenchido por checar_config
         self.dialeto: Dialeto | None = None  # idem — resolvido a partir do settings
         # `Any`, não `psycopg.Connection`: a conexão vem do dialeto e o tipo muda por
@@ -139,13 +142,18 @@ def rodar(checagens: list[Checagem], ctx: Contexto, cor: bool, emoji: bool) -> i
     return 1 if falhas else 0
 
 
-def executar_doctor(env_file: str | None, yaml_file: str, modo_cor: str = "auto") -> int:
+def executar_doctor(
+    env_file: str | None,
+    yaml_file: str,
+    modo_cor: str = "auto",
+    dialeto_override: str | None = None,
+) -> int:
     # A saida nunca deve crashar por encoding: nem no console cp1252 do Windows,
     # nem quando o stdout e capturado por pipe (como o cliente MCP faz). UTF-8 quando
     # da, e errors="replace" como rede de seguranca.
     with contextlib.suppress(Exception):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    ctx = Contexto(env_file, yaml_file)
+    ctx = Contexto(env_file, yaml_file, dialeto_override)
     cor = _decidir_cor(modo_cor, sys.stdout)
     emoji = _suporta_emoji(sys.stdout)
     print(_pinta("== db-mcp doctor ==", NEGRITO, cor))
@@ -172,6 +180,8 @@ def checar_config(ctx: Contexto) -> Resultado:
             "confira os caminhos passados em --env / --config",
         )
     s = ctx.settings
+    if ctx.dialeto_override:  # --dialect da CLI vence a config, como no `run`
+        s.dialeto = ctx.dialeto_override  # type: ignore[assignment]
     # O dialeto entra aqui porque tudo depois dele depende: porta padrão, conexão,
     # probe e SQL de identidade saem do contrato. Um dialeto aceito pela config mas
     # sem implementação (ou com o extra do driver faltando) morre com mensagem legível

@@ -42,8 +42,18 @@ class Dialeto(Protocol):
     nome: str
     sqlglot_dialeto: str
     funcs_proibidas: frozenset[str]
-    schema_padrao: str
     porta_padrao: int  # 5432≠3306: `db_port` é opcional e cada dialeto aplica a sua
+
+    @property
+    def schema_padrao(self) -> str:
+        """Schema assumido quando o cliente não informa um.
+
+        Propriedade (somente leitura), não atributo: no Postgres é a constante
+        `"public"`, mas no MySQL SCHEMA é sinônimo de DATABASE — o padrão é o database
+        configurado, que só se conhece pelo `Settings`. Um atributo de classe forçaria
+        o dialeto MySQL a fingir uma constante que ele não tem.
+        """
+        ...
 
     def criar_pool(self, s: Settings) -> PoolLike: ...
 
