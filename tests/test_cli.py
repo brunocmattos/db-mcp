@@ -7,7 +7,7 @@ from db_mcp.cli import montar
 
 
 def test_montar_retorna_servidor(monkeypatch):
-    for k, v in {"PG_HOST": "h", "PG_DBNAME": "d", "PG_PASSWORD": "p"}.items():
+    for k, v in {"DB_HOST": "h", "DB_DBNAME": "d", "DB_PASSWORD": "p"}.items():
         monkeypatch.setenv(k, v)
     # conectar=False não abre conexão com o banco
     mcp = montar(env_file=None, yaml_file="/nao/existe.yaml", conectar=False)
@@ -17,8 +17,8 @@ def test_montar_retorna_servidor(monkeypatch):
 def test_doctor_subcomando_propaga_exit_code(monkeypatch):
     chamado = {}
 
-    def fake_doctor(env_file, yaml_file, modo_cor):
-        chamado["args"] = (env_file, yaml_file, modo_cor)
+    def fake_doctor(env_file, yaml_file, modo_cor, dialeto_override):
+        chamado["args"] = (env_file, yaml_file, modo_cor, dialeto_override)
         return 3
 
     monkeypatch.setattr("db_mcp.doctor.executar_doctor", fake_doctor)
@@ -26,11 +26,28 @@ def test_doctor_subcomando_propaga_exit_code(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         cli.main()
     assert exc.value.code == 3
-    assert chamado["args"] == (".env", "config.yaml", "auto")
+    assert chamado["args"] == (".env", "config.yaml", "auto", None)
+
+
+def test_flag_dialect_alcanca_o_doctor(monkeypatch):
+    """Regressão do gotcha `# FASE 1:`: o doctor carrega o Settings sozinho, então o
+    --dialect precisa ser propagado. Sem isso a flag MENTIA — rodava as 6 checagens
+    contra o dialeto da config e dizia que estava tudo bem."""
+    chamado = {}
+
+    def fake_doctor(env_file, yaml_file, modo_cor, dialeto_override):
+        chamado["dialeto"] = dialeto_override
+        return 0
+
+    monkeypatch.setattr("db_mcp.doctor.executar_doctor", fake_doctor)
+    monkeypatch.setattr(sys, "argv", ["db-mcp", "--dialect", "mysql", "doctor"])
+    with pytest.raises(SystemExit):
+        cli.main()
+    assert chamado["dialeto"] == "mysql"
 
 
 def test_flag_dialect_sobrescreve_a_config(monkeypatch):
-    for k in ("PG_HOST", "PG_DBNAME", "PG_PASSWORD"):
+    for k in ("DB_HOST", "DB_DBNAME", "DB_PASSWORD"):
         monkeypatch.setenv(k, "x")
     monkeypatch.delenv("DIALETO", raising=False)
     visto = {}
@@ -61,7 +78,7 @@ def test_flag_dialect_sobrescreve_a_config(monkeypatch):
 
 def test_http_sem_auth_token_recusa_subir(monkeypatch):
     # fail-closed: TRANSPORT=http sem AUTH_TOKEN nao pode subir (ficaria sem auth).
-    for k in ("PG_HOST", "PG_DBNAME", "PG_PASSWORD"):
+    for k in ("DB_HOST", "DB_DBNAME", "DB_PASSWORD"):
         monkeypatch.setenv(k, "x")
     monkeypatch.setenv("TRANSPORT", "http")
     monkeypatch.delenv("AUTH_TOKEN", raising=False)

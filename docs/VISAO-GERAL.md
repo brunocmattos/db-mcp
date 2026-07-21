@@ -8,7 +8,7 @@ _entender_. Para uma explicação do zero, sem pressupor conhecimento técnico, 
 ## O que é, em uma frase
 
 Um servidor MCP que deixa um agente de IA (Claude Desktop, Claude Code, uma automação)
-**ler** um banco PostgreSQL — listar tabelas, ver colunas, rodar `SELECT` — sem nenhuma
+**ler** um banco PostgreSQL ou MySQL — listar tabelas, ver colunas, rodar `SELECT` — sem nenhuma
 chance de escrever, alterar ou derrubar o banco.
 
 ## O problema que ele resolve
@@ -29,9 +29,11 @@ próxima ainda segura. Duas são configuração de infraestrutura; a terceira é
 repositório.
 
 1. **No banco (cadeado nº 1).** Um usuário dedicado que só tem `GRANT SELECT` e roda com
-   `default_transaction_read_only = on`. O próprio PostgreSQL recusa qualquer escrita vinda
+   `default_transaction_read_only = on` (só no PostgreSQL — o MySQL não tem equivalente por
+   usuário, e lá o `GRANT` é quem segura). O próprio banco recusa qualquer escrita vinda
    dele. É a defesa mais forte, porque não depende do nosso código estar certo.
-2. **Na rede (cadeado nº 2).** O `pg_hba.conf` do Postgres libera esse usuário só a partir dos
+2. **Na rede (cadeado nº 2).** O `pg_hba.conf` do Postgres (ou o host embutido no nome do
+   usuário, no MySQL) libera esse usuário só a partir dos
    IPs conhecidos (sua máquina, o servidor do MCP). Quem não está na faixa nem conecta.
 3. **Na aplicação (cadeado nº 3).** Antes de qualquer query tocar o banco, o código valida:
    é mesmo um `SELECT`? uma instrução só? a tabela está liberada? tem `LIMIT`? passou do teto
@@ -51,7 +53,7 @@ subir servidor nem falar com um cliente MCP de verdade.
 | Peça | O que faz |
 |---|---|
 | `config.py` | Lê `.env` (segredos) e `config.yaml` (ajustes) e valida na subida — falha cedo se algo estiver errado. |
-| `db.py` | Fachada fina de acesso ao banco; toda query roda em transação `READ ONLY` com timeout. O acesso específico do Postgres (pool, driver) vive num módulo de _dialeto_ à parte, pra receber MySQL e SQL Server depois. |
+| `db.py` | Fachada fina de acesso ao banco; toda query roda em transação `READ ONLY` com timeout. O acesso específico de cada banco (pool, driver) vive num módulo de _dialeto_ à parte — `postgres.py` e `mysql.py` hoje; SQL Server depois. |
 | `guardrails/sql.py` | O validador: aceita só `SELECT`, uma instrução, sem DDL/escrita nem funções perigosas. |
 | `guardrails/policy.py` | A allowlist de tabelas e a injeção automática de `LIMIT`. |
 | `guardrails/ratelimit.py` | O rate limit (token-bucket), para uma rajada de queries não afogar o banco. |
@@ -75,7 +77,8 @@ de dados (`amostra` e `consultar`).
 
 - **FastMCP** — fala o protocolo MCP, com stdio e HTTP prontos e um verificador de token Bearer
   embutido.
-- **psycopg 3** — o driver PostgreSQL, com pool de conexões nativo e o modo `read_only` por
+- **psycopg 3** / **mysql-connector** (extra opcional) — os drivers, ambos com pool nativo. No
+  Postgres, o modo `read_only` por
   conexão, que reforça o cadeado nº 1 do lado da aplicação.
 - **sqlglot** — um parser de SQL em Python puro. É a peça-chave da segurança: em vez de barrar
   comandos perigosos com expressão regular (frágil), a query é **transformada em árvore** e
@@ -115,6 +118,6 @@ passar.
 ## O que ele deliberadamente não faz
 
 Escrever no banco (fora do escopo atual — a escrita terá spec próprio) ou embutir consultas de
-negócio prontas. Falar com outros bancos além de PostgreSQL não é um "nunca": MySQL e SQL Server
-estão em desenvolvimento (fases 1 e 2 do design multi-dialeto); hoje só o Postgres funciona de
+negócio prontas. Falar com outros bancos não é um "nunca": **MySQL já funciona**; o SQL Server
+está em desenvolvimento (fase 2 do design multi-dialeto) e hoje ainda não funciona de
 verdade. O objetivo é ser uma ferramenta genérica e segura de leitura.

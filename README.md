@@ -6,28 +6,54 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://img.shields.io/badge/mypy-strict-blue)](https://mypy-lang.org/)
 
-Servidor MCP somente-leitura para PostgreSQL. Dá a agentes de IA (Claude Desktop,
+Servidor MCP somente-leitura para bancos SQL. Dá a agentes de IA (Claude Desktop,
 Claude Code, automações) acesso de introspecção e `SELECT` a tabelas e views, sem
 escrever, alterar schema ou derrubar o banco.
 
-O código não conhece nenhum banco específico: você aponta o MCP pro seu Postgres
+O código não conhece nenhum banco específico: você aponta o MCP pro seu banco
 preenchendo a config. Nenhum host, senha ou nome de tabela real fica no repositório.
 
-> **Estado atual:** o dialeto PostgreSQL está pronto. MySQL e SQL Server estão em
-> desenvolvimento (fases 1 e 2 do design multi-dialeto). O código já está estruturado
-> pra recebê-los, mas ainda não os suporta.
+> **Estado atual:** **PostgreSQL** e **MySQL** prontos. SQL Server vem na fase 2 do
+> design multi-dialeto — o código já está estruturado pra recebê-lo, mas ainda não o
+> suporta. Escolha o banco com `DIALETO=postgres|mysql` ou `--dialect`.
+> O driver do MySQL é um extra opcional: `uv sync --extra mysql`.
 
 ## Os três cadeados
 
 Defesa em profundidade, três camadas independentes — se uma falha, a próxima ainda segura.
 As duas primeiras são configuração de infra; a terceira é o código deste repo.
 
-1. No banco: um usuário dedicado com apenas `GRANT SELECT` e
-   `default_transaction_read_only = on`. O próprio Postgres recusa escrita.
-2. Na rede: `pg_hba.conf` libera esse usuário só das faixas de IP conhecidas.
-3. Na aplicação: o validador SQL (`sqlglot`: só `SELECT`, uma instrução, sem funções
+1. **No banco:** um usuário dedicado que só pode ler.
+2. **Na rede:** o servidor só aceita esse usuário vindo das faixas de IP conhecidas
+   (`pg_hba.conf` no Postgres; host do usuário / firewall no MySQL).
+3. **Na aplicação:** o validador SQL (`sqlglot`: só `SELECT`, uma instrução, sem funções
    perigosas), allowlist de tabelas, `LIMIT` automático, teto de linhas/bytes, rate limit
    e, no transporte HTTP, autenticação por token Bearer.
+
+### O cadeado nº 1 não tem a mesma força em todo banco
+
+Esta é a parte que a maioria das ferramentas não conta. O cadeado do banco é o mais
+importante — é o único que **não depende do nosso código** — e ele é genuinamente mais
+fraco no MySQL do que no PostgreSQL:
+
+| | PostgreSQL | MySQL |
+|---|---|---|
+| **Permissão** ("suspensório") | `GRANT SELECT` | `GRANT SELECT` |
+| **Transação read-only** ("cinto") | `default_transaction_read_only = on` **no próprio usuário** | `SET SESSION TRANSACTION READ ONLY`, **por conexão** |
+| Quem garante o cinto | o **servidor**, em toda conexão daquele usuário | a **aplicação**, a cada conexão que pega do pool |
+| Reset de sessão entre usos | `DISCARD ALL` | `RESET CONNECTION` |
+| **Força real** | cinto **e** suspensório | suspensório forte + cinto que depende do app |
+
+**O que isso significa na prática:** no PostgreSQL, mesmo que este programa tenha um bug,
+o banco recusa a escrita — o `default_transaction_read_only` está gravado no usuário.
+No MySQL **não existe equivalente por usuário**: o `SET SESSION TRANSACTION READ ONLY`
+vale só para a conexão atual, e nós [o reaplicamos a cada
+checkout](src/db_mcp/dialetos/mysql.py) do pool (medido: o reset do pool zera a
+configuração, então aplicá-la uma vez falharia **aberto**).
+
+👉 **Por isso, no MySQL, o `GRANT SELECT` não é opcional — é o que realmente segura.**
+Conceda apenas `SELECT`, apenas nas tabelas que a IA deve ver. Vale para os dois bancos,
+mas no MySQL é a diferença entre ter e não ter proteção.
 
 ## Ferramentas expostas
 
@@ -45,21 +71,21 @@ linhas de dados (`amostra`, `consultar`).
 
 ## Experimente em 30 segundos
 
-Não precisa de um Postgres seu. O `docker-compose.yml` sobe um banco já semeado e
-com o usuário read-only `mcp_ro` pronto:
+Não precisa de um banco seu. O `docker-compose.yml` sobe um já semeado e com o
+usuário read-only `mcp_ro` pronto:
 
 ```bash
-docker compose up -d                            # Postgres de demo na porta 5433
-uv sync                                          # instala o MCP
-uv run db-mcp --env .env.demo doctor    # confere tudo
+docker compose up -d                     # Postgres de demo na porta 5433
+uv sync                                  # instala o MCP
+uv run db-mcp --env .env.demo doctor     # confere tudo
 ```
 
 Saída (real, contra o container acima):
 
 ```text
 == db-mcp doctor ==
-✅ [OK] Config OK  —  mcp_ro@localhost:5433/demo · allowlist=['*']
-✅ [OK] TCP OK  —  conectou em 9 ms
+✅ [OK] Config OK  —  mcp_ro@localhost:5433/demo · dialeto=postgres · allowlist=['*']
+✅ [OK] TCP OK  —  conectou em 8 ms
 ✅ [OK] Autenticou  —  current_user=mcp_ro · db=demo
 ✅ [OK] Somente-leitura confirmado  —  write recusado: 25006 ReadOnlySqlTransaction
 ✅ [OK] Allowlist = todas (*)  —  nada específico a verificar
@@ -68,7 +94,32 @@ Saída (real, contra o container acima):
 6 ok · 0 falha(s) · 0 pulada(s)
 ```
 
-Repare no quarto check: o próprio banco recusa a escrita de teste. Uma consulta
+Para o MySQL é o mesmo roteiro, atrás de um profile do compose:
+
+```bash
+docker compose --profile mysql up -d          # MySQL de demo na porta 3307
+uv sync --extra mysql                         # instala o MCP + o driver do MySQL
+uv run db-mcp --env .env.demo-mysql doctor
+```
+
+```text
+== db-mcp doctor ==
+✅ [OK] Config OK  —  mcp_ro@127.0.0.1:3307/demo · dialeto=mysql · allowlist=['*']
+✅ [OK] TCP OK  —  conectou em 1 ms
+✅ [OK] Autenticou  —  current_user=mcp_ro@% · db=demo
+✅ [OK] Somente-leitura confirmado  —  write recusado: 42000 ProgrammingError
+✅ [OK] Allowlist = todas (*)  —  nada específico a verificar
+✅ [OK] Latência SELECT 1  —  mediana 0.6 ms (min 0.5 · max 0.7)
+
+6 ok · 0 falha(s) · 0 pulada(s)
+```
+
+Repare no quarto check, e na diferença entre os dois: no Postgres a escrita é recusada
+com `25006` (a transação é read-only — o *cinto*, que vem do próprio usuário do banco);
+no MySQL, com `42000`/`1142` (o usuário não tem o privilégio — o *suspensório*). É a
+tabela acima aparecendo na prática.
+
+Uma consulta
 passa pelo validador e volta com dados; uma escrita é barrada antes de chegar lá:
 
 ```
@@ -82,8 +133,9 @@ consultar("UPDATE clientes SET cidade = 'x'")
 → {"erro": "somente_leitura", "detalhe": "apenas comandos SELECT são permitidos"}
 ```
 
-Para subir o servidor apontado nesse banco: `uv run db-mcp --env .env.demo`.
-Para desligar e apagar tudo: `docker compose down -v`.
+Para subir o servidor apontado num deles: `uv run db-mcp --env .env.demo`
+(ou `--env .env.demo-mysql`). Para desligar e apagar tudo:
+`docker compose --profile mysql down -v`.
 
 ## Instalação
 
@@ -98,15 +150,16 @@ roda a verificação e registra o MCP no cliente.
 Resumo (na mão):
 
 ```bash
-uv sync                       # instala tudo
-cp .env.example .env          # preencha PG_HOST/PG_DBNAME/PG_PASSWORD...
-uv run db-mcp doctor # verifica config, rede, auth, read-only, allowlist, latencia
-uv run db-mcp        # sobe o servidor (stdio)
+uv sync                   # instala tudo (Postgres)
+uv sync --extra mysql     # ...ou com o driver do MySQL junto
+cp .env.example .env      # preencha DIALETO/DB_HOST/DB_DBNAME/DB_PASSWORD...
+uv run db-mcp doctor      # config, rede, auth, read-only, allowlist, latencia
+uv run db-mcp             # sobe o servidor (stdio)
 ```
 
-O `doctor` só fica verde com o banco já preparado (usuário `mcp_ro` +
-`pg_hba`, ver [`docs/02-preparar-o-banco.md`](docs/02-preparar-o-banco.md)). Sem esse
-passo, as checagens de auth e de read-only falham.
+O `doctor` só fica verde com o banco já preparado (usuário `mcp_ro` com `GRANT SELECT`
++ liberação de rede, ver [`docs/02-preparar-o-banco.md`](docs/02-preparar-o-banco.md)).
+Sem esse passo, as checagens de auth e de read-only falham — de propósito.
 
 ## Verificação
 
@@ -129,7 +182,8 @@ validado como Bearer em toda requisição.
 - [`docs/00-para-leigos.md`](docs/00-para-leigos.md): explicação do zero para quem **não é da área** — o que é um MCP, o que é este, como usar, quais as seguranças, como criar um MCP do zero e como adaptar para outros bancos.
 - [`docs/VISAO-GERAL.md`](docs/VISAO-GERAL.md): o projeto explicado do começo ao fim — o que é, por que existe, o que foi usado e por quê.
 - [`docs/01-instalacao.md`](docs/01-instalacao.md): instalação passo a passo (dev e produção).
-- [`docs/02-preparar-o-banco.md`](docs/02-preparar-o-banco.md): criar o usuário read-only e o `pg_hba`.
+- [`docs/02-preparar-o-banco.md`](docs/02-preparar-o-banco.md): criar o usuário read-only
+  e liberar a rede, em cada banco.
 - [`docs/03-arquitetura.md`](docs/03-arquitetura.md): como as peças se encaixam.
 - [`docs/04-troubleshooting.md`](docs/04-troubleshooting.md): erros comuns e o que fazer.
 - [`docs/DESIGN.md`](docs/DESIGN.md): o design completo do produto.

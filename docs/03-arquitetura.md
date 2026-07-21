@@ -19,7 +19,8 @@ Cliente MCP / Agente  ──MCP (stdio ou HTTP+token)──▶  server.py (FastM
                                                           │  só passa SQL aprovado
                                                           ▼
                                                         db.py (fachada) → dialeto
-                                                        (pool psycopg 3, READ ONLY + timeout)
+                                              (pool do dialeto: psycopg 3 ou mysql-connector,
+                                               READ ONLY + timeout, reset entre usos)
                                                           │
                                                           ▼
                                                    PostgreSQL do cliente
@@ -33,7 +34,7 @@ Cliente MCP / Agente  ──MCP (stdio ou HTTP+token)──▶  server.py (FastM
 |---|---|
 | `config.py` | Carrega `.env` (segredos) + `config.yaml` via `pydantic-settings`; valida na subida. |
 | `db.py` | Fachada fina de acesso ao banco; delega ao dialeto (pool, cursor-dict, tradução de erro do driver). Não importa `psycopg` — o núcleo é dialeto-agnóstico. |
-| `dialetos/` | `base.py` = contrato `Dialeto` (o `Protocol`, sem driver); `postgres.py` = pool `psycopg` 3 em transação `READ ONLY` + timeout, `DISCARD ALL` no reset, lista de funções perigosas. MySQL e SQL Server entram aqui (fases 1 e 2). |
+| `dialetos/` | `base.py` = contrato `Dialeto` (o `Protocol`, sem driver); `postgres.py` = pool `psycopg` 3 em transação `READ ONLY` + timeout, `DISCARD ALL` no reset, lista de funções perigosas; `mysql.py` = pool `mysql-connector` com `RESET CONNECTION`, `SET SESSION TRANSACTION READ ONLY` **reaplicado a cada checkout** (o reset do pool o apaga — aplicar uma vez falharia aberto) e a sua própria lista. SQL Server entra aqui (fase 2). |
 | `guardrails/sql.py` | Cadeado nº 3 (a): valida que é `SELECT`, uma instrução, sem funções perigosas. |
 | `guardrails/policy.py` | Allowlist de tabelas + injeção de `LIMIT`. |
 | `guardrails/ratelimit.py` | Rate limit token-bucket por cliente, thread-safe. |

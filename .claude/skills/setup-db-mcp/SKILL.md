@@ -1,11 +1,12 @@
 ---
 name: setup-db-mcp
-description: Use quando o usuário quiser INSTALAR/CONFIGURAR o db-mcp apontando pro banco PostgreSQL dele — pergunta os parâmetros de conexão, ajuda a criar o usuário read-only, escreve .env/config.yaml, roda o doctor e registra o MCP no cliente. Dispare com pedidos como "instala o db-mcp", "configura o MCP read-only no meu banco", "conecta isso no meu Postgres".
+description: Use quando o usuário quiser INSTALAR/CONFIGURAR o db-mcp apontando pro banco PostgreSQL ou MySQL dele — pergunta os parâmetros de conexão, ajuda a criar o usuário read-only, escreve .env/config.yaml, roda o doctor e registra o MCP no cliente. Dispare com pedidos como "instala o db-mcp", "configura o MCP read-only no meu banco", "conecta isso no meu Postgres", "aponta o db-mcp pro meu MySQL".
 ---
 
 # Instalar o db-mcp
 
-Você vai guiar o usuário a instalar este projeto apontando pro Postgres dele. Trabalhe na
+Você vai guiar o usuário a instalar este projeto apontando pro banco dele (PostgreSQL ou
+MySQL — no MySQL, `DIALETO=mysql` e `uv sync --extra mysql`). Trabalhe na
 raiz do projeto (onde estão `pyproject.toml` e `.env.example`). Não comite segredos: `.env`
 e `config.yaml` são git-ignored.
 

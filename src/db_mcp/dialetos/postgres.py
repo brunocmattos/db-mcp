@@ -87,27 +87,33 @@ class DialetoPostgres:
     sqlglot_dialeto = "postgres"
     funcs_proibidas = FUNCS_PROIBIDAS_POSTGRES
     schema_padrao = "public"
+    porta_padrao = 5432
 
     def __init__(self) -> None:
         import psycopg  # lazy: o extra `postgres` só é exigido de quem usa postgres
 
         self._psycopg = psycopg
-        self.erros_readonly: tuple[type[Exception], ...] = (
+        self._erros_readonly = (
             psycopg.errors.InsufficientPrivilege,  # 42501 — role sem privilégio
             psycopg.errors.ReadOnlySqlTransaction,  # 25006 — transação READ ONLY
         )
+
+    def erro_readonly(self, e: Exception) -> bool:
+        # No Postgres as duas condições TÊM classe própria; o predicado é só isinstance.
+        # No MySQL (T5) será `errno in {1792, 1142}` — daí o contrato ser predicado.
+        return isinstance(e, self._erros_readonly)
 
     def criar_pool(self, s: Settings) -> PoolLike:
         import psycopg
         from psycopg_pool import ConnectionPool
 
         conninfo = psycopg.conninfo.make_conninfo(
-            host=s.pg_host,
-            port=s.pg_port,
-            dbname=s.pg_dbname,
-            user=s.pg_user,
-            password=s.pg_password,
-            sslmode=s.pg_sslmode,
+            host=s.db_host,
+            port=s.db_port or self.porta_padrao,  # db_port é opcional; o dialeto decide
+            dbname=s.db_dbname,
+            user=s.db_user,
+            password=s.db_password,
+            sslmode=s.db_sslmode,
             application_name="db-mcp",
             options=f"-c statement_timeout={s.statement_timeout_ms} "
             f"-c idle_in_transaction_session_timeout=10000",
@@ -143,6 +149,35 @@ class DialetoPostgres:
             conn.autocommit = autocommit
             conn.read_only = True  # DISCARD ALL zera o modo read-only; reaplica
 
+    def conectar_doctor(self, s: Settings) -> Any:
+        import psycopg
+
+        conninfo = psycopg.conninfo.make_conninfo(
+            host=s.db_host,
+            port=s.db_port or self.porta_padrao,
+            dbname=s.db_dbname,
+            user=s.db_user,
+            password=s.db_password,
+            sslmode=s.db_sslmode,
+            connect_timeout=5,
+            application_name="db-mcp/doctor",
+        )
+        return psycopg.connect(conninfo, autocommit=True)
+
+    def probar_escrita(self, conn: Any) -> None:
+        # Sair do bloco por exceção é o que força o ROLLBACK: se o CREATE TABLE passar
+        # (banco NÃO é read-only), o `_Aceito` desfaz a tabela antes de voltar. Um
+        # `return` aqui dentro faria o `transaction()` COMMITAR o probe.
+        class _Aceito(Exception):
+            pass
+
+        try:
+            with conn.transaction():  # BEGIN ... sempre revertido
+                conn.execute(self.sql_probe_escrita())
+                raise _Aceito()
+        except _Aceito:
+            return  # write ACEITO — quem interpreta é o doctor
+
     def erro_de_timeout(self, e: Exception) -> bool:
         return isinstance(e, self._psycopg.errors.QueryCanceled)
 
@@ -173,3 +208,42 @@ class DialetoPostgres:
 
     def sql_probe_escrita(self) -> str:
         return "CREATE TABLE __doctor_write_probe__ (n int)"
+
+    def sql_identidade(self) -> str:
+        # Apelidos fixos (`usuario`/`banco`): o doctor lê o dict por essas chaves.
+        return "SELECT current_user AS usuario, current_database() AS banco"
+
+    def sql_introspecao(
+        self, tipo: str, schema: str | None = None, tabela: str | None = None
+    ) -> tuple[str, tuple[Any, ...]]:
+        # SQL idêntico ao que vivia inline no server.py (T2). O nome vai por %s; a rota
+        # não valida (o %s não parseia no mysql), então nada de sqlglot aqui.
+        if tipo == "schemas":
+            return (
+                "SELECT schema_name FROM information_schema.schemata "
+                "WHERE schema_name NOT LIKE 'pg_%' AND schema_name <> 'information_schema' "
+                "ORDER BY schema_name",
+                (),
+            )
+        if tipo == "tabelas":
+            return (
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "ORDER BY table_name",
+                (schema,),
+            )
+        if tipo == "views":
+            return (
+                "SELECT table_name FROM information_schema.views "
+                "WHERE table_schema = %s ORDER BY table_name",
+                (schema,),
+            )
+        if tipo == "colunas":
+            return (
+                "SELECT column_name, data_type, is_nullable "
+                "FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s "
+                "ORDER BY ordinal_position",
+                (schema, tabela),
+            )
+        raise SqlInvalido(f"tipo de introspecção desconhecido: {tipo!r}")

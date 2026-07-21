@@ -1,5 +1,100 @@
 # Worklog — db-mcp
 
+## 2026-07-21 · Desenvolvimento — Fase 1 (MySQL) CONCLUÍDA: T3 a T10
+**O quê:** "continuar" — comecei pela T3/T4 e a sessão foi até o fim da fase.   ·
+**Objetivo:** o MCP falando com um segundo banco, verificado.
+
+**Pausa no meio, e ela mudou a sessão.** O Bruno parou e perguntou por que 5 sessões não tinham
+entregue nada. **Medi e ele estava certo:** 43 commits, `src/ +1.804` linhas contra `*.md +4.971`
+(2,7x mais doc que código), e o `_REGISTRO` ainda com uma entrada só. Zero capacidade nova em 5
+sessões. O erro: 1.591 linhas de plano da Fase 0 pra preparar um arquivo de 190 linhas.
+Eu propus **pular T5-T10** e ele corrigiu com razão — ele não queria pular nada necessário, queria
+saber se havia plano. O corte certo era na **meta-documentação** (plano novo, revisão de plano, doc
+sobre a revisão), não nas tasks. Executei as 6 tasks restantes inteiras, sem escrever documento
+sobre o trabalho até a T9 (que é entregável).
+
+**Feito — 8 commits, todos pushados:**
+- **T3 `ba9836e` + T4 `9ba6166`.** O `doctor.py` deixou de importar `psycopg`: conexão, probe de
+  escrita, porta padrão e SQL de identidade saem do contrato; `erros_readonly` (tupla) virou o
+  predicado `erro_readonly`. **Estendi a T3 com 2 membros que o plano esquecia** (aprovado):
+  `porta_padrao` (o `5432` estava cravado em 3 pontos do doctor) e `sql_identidade()` (o
+  `current_database()` é `database()` no MySQL). Sem eles a T7 teria que mexer no doctor de novo.
+- **T5+T7 `e3cc755` — o MySQL passa a existir.** `doctor --dialect mysql` 6/6.
+- **T6 `2b7b4f6`** — corpus de 49 casos + o bug do `Unread result found`.
+- **T8 `4bdc3a6`** — CI com os dois bancos.  ·  **T9 `db01e6b`** — a tabela honesta dos cadeados.
+- **T10 `d00a0bd`** — verificação final com os containers recriados do zero.
+
+**Medir antes de codar salvou o cadeado principal.** `pool_reset_session=True` **ZERA** o
+`SET SESSION TRANSACTION READ ONLY` no retorno ao pool (medido: mesmo `CONNECTION_ID`, `1 → 0`).
+Se eu tivesse presumido, as conexões voltariam **graváveis em silêncio** do 2º checkout em diante.
+Virou teste de regressão permanente.
+
+**5 defeitos que só existiram porque um 2º banco passou a existir** — nenhum plano teria pego:
+1. 🔴 **`Unread result found`**: fechar cursor com linhas por ler vaza a conexão do pool e mascara
+   o erro. O gatilho é o caminho NORMAL (`fetchmany` + `fetchone` da truncagem) — **toda query
+   truncada quebrava no MySQL**, e a 5ª esgotava o pool.
+2. **`--dialect` não chegava no `doctor`** — passaria a mentir em silêncio.
+3. **Tools defaultavam `schema="public"`** — no MySQL toda chamada sem argumento seria recusada.
+4. **O CI quebraria no mypy** (`uv sync --locked` não instala o extra) — medido antes de commitar.
+5. **Eu quebrei a suíte de quem não instala o extra** ao registrar o mysql (`ImportError`, não skip).
+
+**Dois erros meus que os testes pegaram, não eu:** copiei do Postgres o caso `"load_file"(...)`
+achando que testava "função citada não escapa da blocklist" — **no MySQL aspas duplas são STRING**,
+a citação é a crase; era um teste verde que não testava nada. E um andaime de teste com `object()`
+sem `.close()`.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção** (`no_ar: não`, zero usuários). ⚠️ **O `main` segue
+em `76b123d`** — repo **público**, e quem chega no GitHub vê só a Fase 0, não o MySQL. Decidir o
+merge é a próxima ação. ✅ Tudo pushado (`0/0`), working tree limpo, backup off-machine em dia.
+📌 Uma alegação do próprio `CLAUDE.md` era **falsa** e foi corrigida: a skill `setup-db-mcp` NÃO
+escreve chaves `pg_*` (ela parte do `.env.example`, que já usa `DB_*`).
+
+**Próximo:** decidir o **merge da `refactor/fase-1-mysql` pro `main`** (o repo é público e o main
+está desatualizado); depois planejar a **Fase 2 (SQL Server)** — que herda `tsql`≠`sqlserver`,
+`OPENQUERY`/`OPENROWSET`, `WAITFOR DELAY` e a ausência de reset de sessão.
+
+## 2026-07-20 · Desenvolvimento — Revisão do plano da Fase 1 + T1 e T2 executadas
+**O quê:** "Vamos continuar" — o Bruno escolheu os **3 escopos**: revisar o plano da Fase 1, arrumar as
+divergências dos docs, e executar a T1.   ·   **Objetivo:** plano confiável, docs verdadeiros, e a
+Fase 1 saindo do papel.
+
+**Feito:**
+- **🔎 Revisão MEDIDA do plano da Fase 1 — 1 furo real + 2 detalhes (`76b123d`).** O headline: o
+  **`%s` NÃO parseia no dialeto `mysql`** (sqlglot 30.12: vira `exp.Mod` → `ParseError`), então
+  `validar()`/`injetar_limit()` **derrubariam toda a introspecção** no MySQL. A T9 da Fase 0 manteve o
+  validador ligado nessa rota porque *"o `%s` parseia"* — verdade **só no Postgres**: era sorte, não
+  garantia, e o plano herdou a sorte como se fosse contrato. Patchei a T2 do plano. Também achei: a
+  lista de `funcs_proibidas` do MySQL é *escolhida*, não medida-completa (`get_lock` é função **padrão**,
+  vira `exp.Anonymous` e passaria; `sys_exec`/`sys_eval` são UDFs não-padrão); e T5×T7 se contradizem
+  (`conectar_doctor` com `autocommit=True` × probe "rollback-able" — `rollback()` é no-op sob autocommit).
+  **Confirmado bom:** `INTO OUTFILE`/`DUMPFILE` dão `ParseError` mesmo — a regressão da T6 se justifica.
+- **🧹 Divergências dos docs corrigidas + `main` público em dia (`76b123d`).** O `/abrir` pegou 3
+  afirmações falsas: "+1 commit não-pushado" (era 0), "`main` == fase-0" (estava 2 atrás) e "19 commits
+  atrás" nas Pendências (eram 2). Corrigidas; `main` ff'd `42d1ef4..76b123d` e **pushado** (aprovado pelo
+  Bruno). Branch `refactor/fase-1-mysql` criada a partir do `main` atualizado.
+- **✅ T1 — config neutro `db_*` (`2e484a4`).** `pg_* → db_*` em **22 arquivos** (config, postgres,
+  doctor, 8 testes, `ci.yml`, docs, `.env.demo`/`.env.example`, `uv.lock`). `db_port: int | None`
+  (5432≠3306 — cada dialeto aplica a sua). Extra opcional `mysql = mysql-connector-python>=9`.
+  Verificado: mypy/ruff limpos, 130/24 sem banco, **doctor 6/6 e 154/0 com o demo Docker**.
+- **✅ T2 — introspecção desce pro `Nucleo` (`fa368b1`), com o fix do `%s`.** As 4 tools delegam a
+  `Nucleo.introspectar`, que monta o SQL do novo `sql_introspecao` (do dialeto) **dentro da trilha
+  auditada** e resolve o schema default por `dialeto.schema_padrao`. `consultar` ganhou
+  `validar_sql: bool = True`; a introspecção chama com `False` (SQL fixo, identificador via `params`).
+  **Fecha 2 itens do Backlog** (recusa auditada + tools testáveis). 135/24 sem banco, **159/0 com banco**.
+- **🐛 Bug meu, pego pela suíte COM banco.** `params=()` (schemas, sem binds) fazia o psycopg interpolar
+  o `LIKE 'pg_%'` e estourar (`only '%s' … allowed as placeholders`). Vazio → `None` (sem binds = sem
+  interpolação). **A suíte sem banco passava** — só o e2e contra o Postgres vivo pegou. Regressão em teste.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção** (`no_ar: não`, nenhum usuário). ✅ A branch
+`refactor/fase-1-mysql` foi **pushada no fim da sessão** (decisão do Bruno no `/fechar`) — T1/T2 e os
+docs com backup off-machine. 📌 O repo é **público**: o `main` mostra a Fase 0 + o plano revisado; a WIP
+da Fase 1 fica na branch. 📌 A skill externa `setup-db-mcp` (fora do repo) ainda escreve chaves `pg_*`
+→ vai gerar config quebrada até ser atualizada.
+
+**Próximo:** T3 (doctor dialeto-aware) e T4 (`erros_readonly` → predicado), Postgres-prep rápidas; depois
+a **T5 (`dialetos/mysql.py`)**, que **exige medir o `pool_reset_session` do driver antes de codar** — é o
+cadeado que *falha aberta*.
+
 ## 2026-07-20 · Manutenção — Merge de main, sessões paralelas, e plano da Fase 1
 **O quê:** fechar o ciclo da Fase 0 (merge pro `main` público) e dar início à Fase 1 escrevendo o
 plano.   ·   **Objetivo:** repo público mostrando a Fase 0, lacunas fechadas, e um plano da Fase 1

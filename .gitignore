@@ -2,8 +2,9 @@
 .env
 .env.*
 !.env.example
-# .env.demo tem credenciais FAKE do Postgres de demonstração (docker compose):
+# .env.demo* têm credenciais FAKE dos bancos de demonstração (docker compose):
 !.env.demo
+!.env.demo-mysql
 *.cred
 config.yaml
 !config.example.yaml
