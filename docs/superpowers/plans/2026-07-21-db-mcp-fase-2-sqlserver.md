@@ -8,7 +8,9 @@
 6/6 contra um SQL Server real, com a suíte verde nos três bancos.
 
 **Architecture:** um módulo novo (`dialetos/sqlserver.py`) implementando o Protocol `Dialeto`,
-mais uma linha no `_REGISTRO`. **Nenhum arquivo do núcleo muda.** A conexão é **sem pool** (o
+mais uma linha no `_REGISTRO`. ~~**Nenhum arquivo do núcleo muda.**~~ — **esta previsão FALHOU;
+ver os resultados no fim do documento.** O núcleo mudou em dois arquivos (`doctor.py` e
+`guardrails/policy.py`), por suposições que só o banco vivo expôs. A conexão é **sem pool** (o
 pymssql não tem um) — cada `.connection()` abre uma conexão nova, o que elimina por construção
 a classe de bug do reset de sessão.
 
