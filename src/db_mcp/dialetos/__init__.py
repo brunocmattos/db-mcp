@@ -19,6 +19,12 @@ def _mysql() -> Dialeto:
     return DialetoMySQL()
 
 
+def _sqlserver() -> Dialeto:
+    from .sqlserver import DialetoSqlServer
+
+    return DialetoSqlServer()
+
+
 # Registro dos dialetos com implementação — a FONTE ÚNICA da verdade. `obter_dialeto` e o
 # teste de invariante (tests/test_dialetos.py) bebem daqui, então quem acrescentar um
 # dialeto não pode escapar do gate. Cada valor é uma fábrica que importa o módulo do driver
@@ -26,6 +32,7 @@ def _mysql() -> Dialeto:
 _REGISTRO: dict[str, Callable[[], Dialeto]] = {
     "postgres": _postgres,
     "mysql": _mysql,
+    "sqlserver": _sqlserver,
 }
 
 # Nomes com implementação de fato. NÃO é o mesmo conjunto do Literal do config (que ACEITA
