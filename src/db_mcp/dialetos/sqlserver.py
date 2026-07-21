@@ -9,8 +9,12 @@ if TYPE_CHECKING:
     from .base import PoolLike
 
 # O mecanismo (exp.Anonymous + nome) fica no validador; só a lista é do dialeto.
-# Defesa em profundidade: o limite real é o GRANT (medido: CREATE recusa com 262).
-# Esta lista existe pro que o GRANT NÃO barra.
+#
+# Defesa em profundidade: o limite real é o GRANT (medido: CREATE recusa com 262). Esta
+# lista NÃO existe porque o GRANT mínimo falha — com GRANT SELECT em tabela específica,
+# medido, as fn_* já são recusadas (Msg 300/8189/229). Ela existe porque o GRANT do mundo
+# real costuma ser mais largo que o mínimo (db_datareader, login herdado, papel de outro
+# sistema), e nesse cenário ela é a única coisa de pé. Errar pra menos aqui é caro.
 #
 # Enumerada, NÃO um prefixo "xp_*": um prefixo daria falsa cobertura (as fn_* ficariam
 # de fora) e barraria nome de usuário que por acaso comece com xp_.

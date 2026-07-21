@@ -136,12 +136,38 @@ Isso **corrige uma expectativa do `CLAUDE.md`**, que registrava `OPENQUERY`/`OPE
 sim — mas dois dos três caem na blocklist de funções. O mecanismo já existe; basta popular a
 lista.
 
-**`funcs_proibidas` (lista fechada, não "a família `xp_*`"):** `openquery`, `opendatasource`,
-`openrowset`, `xp_cmdshell`, `xp_regread`, `xp_regwrite`, `xp_dirtree`, `xp_fileexist`,
-`xp_subdirs`, `xp_msver`, `fn_get_audit_file`, `fn_trace_gettable`, `fn_my_permissions`.
-A lista é enumerada de propósito: um prefixo `xp_*` genérico daria falsa sensação de cobertura
-(as `fn_*` ficariam de fora) e barraria nomes de usuário que por acaso comecem com `xp_`.
+**`funcs_proibidas` (lista fechada, não "a família `xp_*`").** A lista é enumerada de propósito:
+um prefixo `xp_*` genérico daria falsa sensação de cobertura (as `fn_*` ficariam de fora) e
+barraria nomes de usuário que por acaso comecem com `xp_`.
 ⚠️ Lista vazia falharia **aberta** — já guardado por `test_invariante_todo_dialeto`.
+
+📏 **Correção pós-revisão (2026-07-21): a lista tem dois grupos com forças MUITO diferentes, e
+a primeira redação deste spec não distinguia.**
+
+*Grupo A — a blocklist é mesmo quem barra.* `openquery`, `opendatasource`, `openrowset`,
+`fn_get_audit_file`, `fn_trace_gettable`, `fn_my_permissions`, `fn_dblog`, `fn_dump_dblog`.
+Executam de fato como função/rowset dentro de um `SELECT`, chegam como `exp.Anonymous` e
+passam a checagem de raiz. Sem a lista, passariam.
+
+*Grupo B — redundância deliberada, NÃO a defesa real.* `xp_cmdshell`, `xp_regread`,
+`xp_regwrite`, `xp_dirtree`, `xp_fileexist`, `xp_subdirs`, `xp_msver`. São **stored procedures
+estendidas**: só invocáveis por `EXEC`, nunca como função num `SELECT`. Medido contra SQL Server
+2022 **como `sa`** (para eliminar o GRANT como variável):
+
+```
+SELECT * FROM xp_cmdshell('dir')  ->  Msg 208: Invalid object name 'xp_cmdshell'.
+SELECT xp_cmdshell('dir')         ->  Msg 195: 'xp_cmdshell' is not a recognized built-in function name.
+```
+
+O motor recusa a sintaxe para **qualquer** usuário. A forma real de ataque (`EXEC xp_cmdshell
+'dir'`) morre na checagem de raiz, independente da blocklist. Elas ficam na lista porque
+sobra-defesa é barata e errar pra menos é caro — mas **afirmar que "só a blocklist as pega"
+seria falso**, e este spec afirmava.
+
+⚠️ Consequência prática para quem mantiver a lista: apagar uma entrada do **grupo A** abre um
+buraco real; apagar uma do **grupo B** não muda nada. O corpus de ataque tem que exercitar o
+grupo A pelo caminho que chega na blocklist — inclusive a forma de 3 argumentos do `OPENROWSET`,
+que parseia (a de credencial `;`-separada e a `BULK` morrem antes, no `ParseError`).
 
 **Os quatro ⚠️ falham fechado por acidente**, não por desenho — exatamente o caso do
 `INTO OUTFILE` no MySQL. Ganham regressão em `tests/test_sql_sqlserver.py` que exige
