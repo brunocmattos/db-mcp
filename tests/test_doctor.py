@@ -124,18 +124,47 @@ def test_checar_tcp_pula_sem_config():
         checar_tcp(ctx)
 
 
-def test_checar_config_dialeto_sem_implementacao(monkeypatch):
-    # O Literal do config ACEITA "sqlserver", mas o _REGISTRO só o resolverá na Fase 2.
-    # Sem essa checagem o erro estouraria cru na próxima checagem, sem remediação.
-    # (Era "mysql" até a T5 da Fase 1 — o dialeto passou a existir e o teste acusou.)
+@pytest.mark.parametrize(
+    "excecao",
+    [
+        ValueError("dialeto desconhecido: 'sqlserver'"),
+        ImportError("No module named 'pymssql'"),
+    ],
+    ids=["dialeto_sem_implementacao", "driver_nao_instalado"],
+)
+def test_checar_config_dialeto_indisponivel(monkeypatch, excecao):
+    # 🪤 Versão anterior deste teste EMPRESTAVA o acidente de existir um valor do
+    # Literal (config.py) ainda sem fábrica no _REGISTRO dos dialetos, e quebrou as
+    # DUAS vezes que o dialeto emprestado ganhou implementação: era "mysql" até a
+    # Fase 1 T5, depois "sqlserver" até a Fase 2 T1 — aí não sobrou nenhum valor do
+    # Literal por implementar, e o teste morreu de vez.
+    #
+    # O sujeito real nunca foi "existe um dialeto por implementar": é que
+    # `checar_config` recusa com "Dialeto indisponível" (e as checagens seguintes se
+    # PULAM em vez de estourar) sempre que `obter_dialeto` FALHA, seja lá por que
+    # motivo. Construímos o cenário direto via monkeypatch em `db_mcp.doctor.obter_dialeto`
+    # — o nome está ligado no módulo do doctor (doctor.py importa `from .dialetos
+    # import ... obter_dialeto`), então é esse o alvo estável, não `db_mcp.dialetos`.
+    # Assim o teste vale pra sempre, independente de quantos dialetos existam.
+    #
+    # `DIALETO=postgres` de propósito: um dialeto que EXISTE de verdade, porque o
+    # ponto agora é "obter_dialeto falhou", não "qual dialeto era". As duas exceções
+    # cobrem os dois motivos que a remediação de checar_config promete (dialeto sem
+    # implementação nesta versão, ou driver/extra faltando) — o `except Exception`
+    # de lá trata os dois igual.
     _limpar_pg(monkeypatch)
     for k, v in {
         "DB_HOST": "h",
         "DB_DBNAME": "d",
         "DB_PASSWORD": "p",
-        "DIALETO": "sqlserver",
+        "DIALETO": "postgres",
     }.items():
         monkeypatch.setenv(k, v)
+
+    def _obter_dialeto_fake(_nome):
+        raise excecao
+
+    monkeypatch.setattr("db_mcp.doctor.obter_dialeto", _obter_dialeto_fake)
     ctx = Contexto(env_file=None, yaml_file="/nao/existe.yaml")
     r = checar_config(ctx)
     assert not r.ok
