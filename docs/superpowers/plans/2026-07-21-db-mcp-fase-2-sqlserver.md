@@ -1295,3 +1295,55 @@ docker compose --profile mysql --profile sqlserver down -v
 - [ ] CI verde com os **três** jobs de integração
 - [ ] Núcleo sem import de driver (Step 4 da Task 9)
 - [ ] Tabela dos cadeados preenchida com o medido, sem maquiagem
+
+---
+
+## ✅ Resultados MEDIDOS na verificação final (T9, 2026-07-21)
+
+Containers **recriados do zero** (`down -v` antes) — os três ficaram healthy em ~20 s; o seed do
+SQL Server aplicou os 3 `.sql` 2 s após o servidor aceitar conexão.
+
+| | sem banco | Postgres | MySQL | SQL Server |
+|---|---|---|---|---|
+| suíte | **237** ✅ / 38 ⏭️ | **261** ✅ / 14 ⏭️ | **262** ✅ / 13 ⏭️ | **248** ✅ / 27 ⏭️ |
+| `doctor` | — | **6/6** | **6/6** | **6/6** |
+| recusa de escrita | — | `25006 ReadOnlySqlTransaction` | `42000 ProgrammingError` | **`262 OperationalError`** |
+| latência `SELECT 1` | — | 0,4 ms | 0,7 ms | 1,6 ms |
+
+`ruff check` · `ruff format --check` · `mypy src` **limpos**. CI **8/8** verde
+(`integration sqlserver` em **47 s** — o 2º job mais rápido, contra 1m13s do MySQL).
+
+**Skips auditados** (`-rs`, modo SQL Server): 12 do corpus do Postgres + 13 do MySQL + 2 de
+integração específica = **27**, e nada mais.
+
+**Núcleo dialeto-agnóstico — provado por EXECUÇÃO, não por inspeção.** Com `psycopg`,
+`psycopg_pool`, `mysql`, `mysql.connector`, `pymssql` e `_mssql` forçados a `None` em
+`sys.modules`, os **8 módulos do núcleo** importam sem erro:
+
+```
+db_mcp.dialetos.base · db_mcp.db · db_mcp.server · db_mcp.doctor
+db_mcp.config · db_mcp.cli · db_mcp.guardrails.sql · db_mcp.guardrails.policy
+```
+
+(O `grep` por `psycopg|mysql|pymssql` casa comentários — por isso a prova é por execução.)
+
+### O que a fase custou de verdade
+
+| | previsto no plano | real |
+|---|---|---|
+| tasks | 9 | 9 + **3 correções pós-revisão** (T1b, T2b, T3b) |
+| arquivos do dialeto | 1 + 1 linha | ✅ confirmado |
+| **arquivos do núcleo** | **0** | 🪤 **2** — `doctor.py` (+16) e `guardrails/policy.py` (+12) |
+
+### Os achados que só o banco vivo entregou
+
+1. 🔴 **`injetar_limit` devolvia SQL cru** no fast-path. O sqlglot faz parse **leniente** e aceita
+   `LIMIT n` com `read="tsql"`, então query com `LIMIT` passava intocada e o servidor recusava.
+2. **`SELECT 1` sem alias** estoura o cursor `as_dict` do pymssql (`ColumnsWithoutNamesError`).
+3. **pymssql não expõe `.sqlstate`** — o número `262` sumia da mensagem do doctor.
+4. 🔴 **`timeout=0` no pymssql = SEM timeout**, e a config não tem mínimo (regressão em T3b).
+5. **7 entradas `xp_*` da blocklist são inertes** — o motor recusa a sintaxe mesmo para `sa`.
+6. **`openrowset` não tinha teste** que provasse o caminho até a blocklist.
+7. **`__version__` ficou em `0.4.0`** com o `pyproject` em `0.5.0`, sem nada guardando.
+
+**Nenhum deles apareceria em plano, revisão de código ou teste com mock.**
