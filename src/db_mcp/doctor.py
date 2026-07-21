@@ -249,7 +249,12 @@ def checar_somente_leitura(ctx: Contexto) -> Resultado:
     d = ctx.dialeto
     try:
         d.probar_escrita(ctx.conn)
-    except d.erros_readonly as e:
+    except Exception as e:
+        # Só o erro que o dialeto RECONHECE como recusa de escrita conta como prova.
+        # Qualquer outro sobe e vira "erro inesperado" no `rodar` — nunca "somente-leitura
+        # confirmado", que seria o falso positivo perigoso num cadeado que falha aberta.
+        if not d.erro_readonly(e):
+            raise
         return Resultado(
             True,
             "Somente-leitura confirmado",

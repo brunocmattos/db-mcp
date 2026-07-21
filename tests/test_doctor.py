@@ -170,11 +170,14 @@ class _DialetoFake:
     # o fake usando "public" o teste da allowlist passaria mesmo sem o refactor.
     schema_padrao = "sch_do_dialeto"
     porta_padrao = 1234
-    erros_readonly = (_ErroReadonly,)
 
-    def __init__(self, respostas=lambda sql, params: None, escrita_aceita=False):
+    def __init__(self, respostas=lambda sql, params: None, escrita_aceita=False, erro=None):
         self.cursor = _CursorFake(respostas)
         self.escrita_aceita = escrita_aceita
+        self.erro = erro or _ErroReadonly("read-only")
+
+    def erro_readonly(self, e):
+        return isinstance(e, _ErroReadonly)
 
     @contextmanager
     def linhas_como_dict(self, conn):
@@ -186,17 +189,27 @@ class _DialetoFake:
     def probar_escrita(self, conn):
         if self.escrita_aceita:
             return  # voltar sem erro = o banco ACEITOU a escrita
-        raise _ErroReadonly("read-only")
+        raise self.erro
 
     def erro_do_banco(self, e):
         return isinstance(e, _ErroReadonly)
+
+
+class _ConnFake:
+    """O doctor nunca consulta a conexão direto — só via o dialeto. Só o `rodar` a fecha."""
+
+    def __init__(self):
+        self.fechada = False
+
+    def close(self):
+        self.fechada = True
 
 
 def _ctx_com(dialeto, settings=None):
     ctx = Contexto(env_file=None, yaml_file="/nao/existe.yaml")
     ctx.dialeto = dialeto
     ctx.settings = settings
-    ctx.conn = object()  # o doctor nunca chama nada nele direto — só via o dialeto
+    ctx.conn = _ConnFake()
     return ctx
 
 
@@ -213,6 +226,18 @@ def test_checar_somente_leitura_falha_quando_o_probe_volta_sem_erro():
     r = checar_somente_leitura(_ctx_com(_DialetoFake(escrita_aceita=True)))
     assert not r.ok
     assert r.remediacao
+
+
+def test_checar_somente_leitura_nao_confirma_com_erro_qualquer_do_banco():
+    # T4: o veredito vem do predicado `erro_readonly`, não de um `except` largo. Um erro
+    # de banco que NÃO é recusa de escrita (tabela já existe, disco cheio, timeout) não
+    # pode virar "somente-leitura confirmado" — o cadeado já falha aberta, e um falso
+    # positivo aqui esconderia uma conexão gravável.
+    d = _DialetoFake(erro=RuntimeError("disco cheio"))
+    with pytest.raises(RuntimeError):
+        checar_somente_leitura(_ctx_com(d))
+    # no doctor de verdade isso vira falha visível ("erro inesperado"), não um OK
+    assert rodar([lambda ctx: checar_somente_leitura(_ctx_com(d))], _ctx_com(d), False, False) == 1
 
 
 def test_checar_auth_le_a_identidade_pelo_dialeto(monkeypatch):
