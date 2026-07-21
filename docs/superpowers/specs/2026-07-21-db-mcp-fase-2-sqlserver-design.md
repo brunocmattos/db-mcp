@@ -36,9 +36,34 @@ ver §7.
 ~ docs/                                tabela dos cadeados + receita de DENY
 ```
 
-**Nenhum arquivo do núcleo muda.** O único caso que exigiria (`guardrails/policy.py`) foi
-extraído para fora da fase de propósito, para que o padrão "um dialeto = um arquivo + uma
-linha" continue sendo verdade medível e não slogan.
+~~**Nenhum arquivo do núcleo muda.**~~ 📏 **ERRADO — corrigido em 2026-07-21, na execução da T6.**
+
+Esta seção afirmava que a fase não tocaria o núcleo. **Tocou**, e só a primeira conversa com um
+SQL Server real revelou por quê:
+
+```
+src/db_mcp/doctor.py            | 16 ++++++++++++++--
+src/db_mcp/guardrails/policy.py | 12 ++++++++++--
+```
+
+- **`doctor.py` (`201d378`)** — `checar_latencia` usava `SELECT 1` cru, e o cursor `as_dict=True`
+  do pymssql estoura com `ColumnsWithoutNamesError` numa coluna sem nome (virou `SELECT 1 AS um`).
+  E a mensagem de `checar_somente_leitura` lia `.sqlstate`, que o pymssql **não expõe** — o
+  número `262` sumia da tela, justamente o que o operador precisa ver.
+- **`guardrails/policy.py` (`b150f28`)** — o mais sério: `injetar_limit` tinha um *fast-path* que
+  devolvia o **SQL cru** quando já havia limite dentro do teto. O sqlglot faz parse **leniente** e
+  aceita `LIMIT n` mesmo com `read="tsql"`, então uma query com `LIMIT` — sintaxe que **não existe
+  no T-SQL** — passava intocada e o servidor recusava com `Incorrect syntax near '1'`. Agora os
+  dois early-return reemitem via `arvore.sql(dialect=dialeto)`.
+
+**O que isto ensina, e vale mais que a fase:** o padrão *"um dialeto = um arquivo + uma linha"*
+vale para o **módulo do dialeto**, não para os **cadeados compartilhados**. Já quebrou duas vezes
+seguidas — no `policy.py` pelo `catalog` (`26f2bff`, extraído para antes da fase) e agora no
+`doctor.py` + `policy.py`. O motivo é sempre o mesmo: o núcleo carrega **suposições invisíveis**
+assadas pelos dialetos que já existiam (uma coluna sem nome é aceitável; todo driver expõe
+`sqlstate`; SQL que já tem limite pode sair sem passar pelo emissor). Um dialeto novo não
+*acrescenta* código ao núcleo — ele **expõe** o que estava presumido ali. Nenhum plano pega isso;
+só banco vivo pega.
 
 ### 🪤 O gotcha nº 1, que mata em silêncio
 
