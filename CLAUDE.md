@@ -136,12 +136,36 @@ escopo (um cadeado não pode depender do `traverse_scope`, que tem fallback por 
 
 **Por que existiu o buraco:** `tabelas_referenciadas` montava o nome com `t.db + t.name` e
 **descartava o `t.catalog`** — `outrodb.public.clientes` virava `public.clientes` e casava
-com a entrada feita pro banco corrente. Era **latente, não explorável** (medido: Postgres dá
-`cross-database references are not implemented`, MySQL dá `1064`), mas o **SQL Server executa
-nome de 3 partes** — a Fase 2 abriria o buraco no dia em que existisse. Consequência assumida:
-`demo.public.clientes` (o próprio banco, SQL válido no PG) também passa a ser recusado.
+com a entrada feita pro banco corrente. No Postgres e no MySQL é inofensivo (medido: dão
+`cross-database references are not implemented` e `1064`); **o SQL Server executa nome de 3
+partes**. Consequência assumida: `demo.public.clientes` (o próprio banco, SQL válido no PG)
+também passa a ser recusado.
+
+📏 **Demonstrado contra um SQL Server 2022 real (2026-07-21), com a precisão que o commit
+`26f2bff` não teve.** Aquele commit disse "um login costuma enxergar vários bancos da mesma
+instância", o que é **largo demais**. O que de fato acontece:
+- Por **padrão** um login **não** lê dado de usuário de outro banco: erro **916**
+  (`server principal is not able to access the database`). O cadeado nº 1 segura.
+- O vazamento real exige o login estar **legitimamente mapeado em mais de um banco** — arranjo
+  comum (cópias dev/homolog/prod, multi-tenant). Aí o cadeado nº 1 **para de segurar**, e a
+  allowlist era a única coisa de pé. Medido: com GRANT nos dois bancos e allowlist
+  `['dbo.clientes']`, o servidor entregou `financeiro.dbo.clientes` e **a allowlist antiga
+  deixava passar** quando o `schema.tabela` coincidia (comuníssimo) — ou **sempre**, se a
+  entrada fosse não-qualificada (`['clientes']`), que casa pelo último segmento.
+
 ⚠️ Este foi o **primeiro caso em que um dialeto novo exigiu mexer no núcleo** — o padrão
 "um arquivo + uma linha" vale pro dialeto, não pros cadeados compartilhados.
+
+### 🚨 SQL Server vaza METADADO por padrão (medido 2026-07-21) — entrada da Fase 2
+Um login com `GRANT SELECT` em **uma** tabela ainda enxerga, sem nenhum grant extra:
+lista de **todos os bancos** da instância (`sys.databases`, 6 linhas), **todos os logins SQL**
+(`sys.sql_logins`), e o **catálogo do `master`** (`master.sys.objects`). Não é dado de usuário,
+mas é reconhecimento de terreno de graça — e **não tem equivalente no Postgres/MySQL**.
+
+Medido que **fecha** (vai virar receita no `docs/02-preparar-o-banco.md` da Fase 2):
+`DENY VIEW ANY DATABASE` · `DENY VIEW ANY DEFINITION` · `REVOKE CONNECT FROM guest` nos demais
+bancos. Depois disso: `master.sys.objects` cai de 3 pra **0 linhas**, e `sys.databases` de 6
+pra **3** (`master`/`tempdb`/o próprio — o piso do SQL Server, não dá pra zerar).
 
 ### Gotchas vivos
 - **Repo PÚBLICO** — o único do portfólio. Pense antes de commitar.
