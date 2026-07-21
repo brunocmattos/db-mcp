@@ -201,3 +201,78 @@ jobs:
           DB_USER: mcp_ro
           DB_PASSWORD: mcp_ro_demo
         run: uv run db-mcp --dialect mysql doctor
+
+  # Terceiro dialeto. Diferente do Postgres/MySQL, a imagem do SQL Server NAO aplica
+  # .sql de um diretorio de init sozinha (por isso o demo local tem um entrypoint.sh
+  # customizado — ver demo/init-sqlserver/entrypoint.sh). E os `services:` do Actions
+  # so aceitam image/env/ports/options/credentials: nao da pra trocar o entrypoint
+  # aqui pra reusar aquele script direto.
+  #
+  # Por isso o seed vira um STEP: copia os .sql pro container do servico (docker cp)
+  # e aplica com o MESMO sqlcmd/MESMA ordem/MESMO -f 65001 que o entrypoint.sh usa
+  # localmente — via `docker exec` no id do servico (job.services.sqlserver.id).
+  # Reusa o caminho ja medido no demo local em vez de duplicar a logica de split
+  # por `GO` num seeder Python (GO e' diretiva do sqlcmd, nao SQL — reimplementar
+  # o parser em outra linguagem so' pra fugir do docker exec nao paga o custo).
+  # Validado igual a este job, container a container, antes do push.
+  integration-sqlserver:
+    name: integration sqlserver (ubuntu / py3.12)
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Sonda_MCP_2026!"
+          MSSQL_PID: "Developer"
+        ports:
+          - 1434:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Sonda_MCP_2026!' -C -Q 'SELECT 1' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      # `--all-extras`: sem o driver, o mypy nao resolve `import pymssql` e o
+      # `test_invariante_todo_dialeto[sqlserver]` se PULA (dialeto_ou_skip),
+      # silenciando justamente o gate que existe pra pegar dialeto novo mal escrito.
+      - name: Install dependencies (locked, reproducible)
+        run: uv sync --locked --all-extras
+
+      # Mesmo schema/seed/usuário read-only da demo local (demo/init-sqlserver/*.sql),
+      # aplicados na mao porque a imagem nao roda .sql de diretorio de init sozinha.
+      - name: Seed database (schema + dados + usuario read-only)
+        run: |
+          docker cp demo/init-sqlserver "${{ job.services.sqlserver.id }}:/init"
+          docker exec "${{ job.services.sqlserver.id }}" bash -c '
+            set -e
+            for f in /init/*.sql; do
+              echo "aplicando $f"
+              /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "Sonda_MCP_2026!" -C -f 65001 -i "$f"
+            done
+          '
+
+      # Com DB_* no ambiente, integração/E2E/doctor rodam de verdade. `-rs` deixa os
+      # skips (corpus dos OUTROS dois dialetos) auditáveis no log em vez de silenciosos.
+      - name: Run full test suite
+        env:
+          DIALETO: sqlserver
+          DB_HOST: 127.0.0.1
+          DB_PORT: "1434"
+          DB_DBNAME: demo
+          DB_USER: mcp_ro
+          DB_PASSWORD: "Mcp_ro_demo_2026!"
+        run: uv run pytest -q -rs
+
+      - name: Doctor (6/6 contra o SQL Server real)
+        run: uv run db-mcp --env .env.demo-sqlserver doctor
