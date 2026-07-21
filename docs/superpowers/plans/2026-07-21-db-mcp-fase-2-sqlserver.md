@@ -72,7 +72,14 @@ Expected: instala `pymssql`, sem erro.
 
 - [ ] **Step 3: Escrever o esqueleto do dialeto**
 
-Crie `src/db_mcp/dialetos/sqlserver.py`:
+Crie `src/db_mcp/dialetos/sqlserver.py`.
+
+⚠️ **`Dialeto` é um Protocol ESTRUTURAL: o mypy exige TODOS os membros, não só os que esta
+task usa.** Um esqueleto com apenas `schema_padrao`/`criar_pool`/`conectar_doctor` faz
+`_sqlserver() -> Dialeto` falhar com
+`Incompatible return value type (got "DialetoSqlServer", expected "Dialeto")`. Por isso os
+demais membros entram já aqui como `raise NotImplementedError`, cada um marcado com a task
+que o preenche.
 
 ```python
 from __future__ import annotations
@@ -80,6 +87,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from contextlib import AbstractContextManager
+
     from ..config import Settings
     from .base import PoolLike
 
@@ -110,6 +119,41 @@ class DialetoSqlServer:
 
     def conectar_doctor(self, s: Settings) -> Any:
         raise NotImplementedError  # Task 3
+
+    # --- Placeholders restantes do Protocol Dialeto -----------------------------
+    #
+    # Sem eles o mypy strict recusa `_sqlserver() -> Dialeto` (Protocol estrutural
+    # exige TODOS os membros, não só os que o T1 usa). Cada um preenche na task
+    # marcada no comentário.
+
+    def probar_escrita(self, conn: Any) -> None:
+        raise NotImplementedError  # Task 4
+
+    def erro_readonly(self, e: Exception) -> bool:
+        raise NotImplementedError  # Task 4
+
+    def erro_de_timeout(self, e: Exception) -> bool:
+        raise NotImplementedError  # Task 4
+
+    def erro_do_banco(self, e: Exception) -> bool:
+        raise NotImplementedError  # Task 4
+
+    def linhas_como_dict(self, conn: Any) -> AbstractContextManager[Any]:
+        raise NotImplementedError  # Task 5
+
+    def sql_amostra(self, tabela: str, n: int) -> str:
+        raise NotImplementedError  # Task 5
+
+    def sql_probe_escrita(self) -> str:
+        raise NotImplementedError  # Task 4
+
+    def sql_identidade(self) -> str:
+        raise NotImplementedError  # Task 5
+
+    def sql_introspecao(
+        self, tipo: str, schema: str | None = None, tabela: str | None = None
+    ) -> tuple[str, tuple[Any, ...]]:
+        raise NotImplementedError  # Task 5
 ```
 
 - [ ] **Step 4: Registrar no `_REGISTRO`**
@@ -148,6 +192,83 @@ Expected: **FAIL** em `test_invariante_todo_dialeto[sqlserver]` com
 ```bash
 git add pyproject.toml uv.lock src/db_mcp/dialetos/sqlserver.py src/db_mcp/dialetos/__init__.py
 git commit -m "feat(dialeto): esqueleto do sqlserver + extra opcional (T1)"
+```
+
+---
+
+### Task 1b: destravar o teste de "dialeto indisponível"
+
+> **Por que esta task existe:** registrar `"sqlserver"` no `_REGISTRO` (Task 1, Step 4) **quebra**
+> `tests/test_doctor.py::test_checar_config_dialeto_sem_implementacao`. Aquele teste tomava
+> emprestado, como cenário, o acidente de existir um valor do `Literal` do config sem fábrica no
+> `_REGISTRO`. Já quebrou por isso na Fase 1 T5 (o alvo era `"mysql"` e migrou para `"sqlserver"`),
+> e agora **não sobra alvo** — os três dialetos existem. Não é regressão da Task 1: é consequência
+> estrutural de completá-la.
+
+**Files:**
+- Modify: `tests/test_doctor.py:127-145`
+
+- [ ] **Step 1: Reescrever o teste construindo o cenário**
+
+O sujeito real do teste não é "existe um dialeto por implementar" — é **"quando `obter_dialeto`
+falha, `checar_config` recusa com mensagem legível e as checagens seguintes se PULAM em vez de
+estourar"**. Isso se testa direto, e aí o teste vale para sempre.
+
+`src/db_mcp/doctor.py:15` faz `from .dialetos import Dialeto, obter_dialeto` — o nome está ligado
+no módulo do doctor, então o alvo estável é **`db_mcp.doctor.obter_dialeto`**. A linha 191 é
+`except Exception`, então qualquer exceção serve.
+
+Cubra **os dois motivos** que a remediação (linhas 196-197) promete — "sem implementação **ou**
+driver não instalado" — porque hoje só um é exercitado:
+
+```python
+@pytest.mark.parametrize(
+    "exc",
+    [
+        ValueError("dialeto desconhecido: 'oracle'"),  # sem implementação
+        ImportError("No module named 'pymssql'"),  # extra do driver faltando
+    ],
+    ids=["sem-implementacao", "driver-faltando"],
+)
+def test_checar_config_dialeto_indisponivel(monkeypatch, exc):
+    # O cenário é CONSTRUÍDO, não tomado emprestado. A versão anterior deste teste
+    # dependia de existir um valor do Literal do config SEM fábrica no _REGISTRO — e por
+    # isso quebrou DUAS vezes: na Fase 1 T5 (o alvo era "mysql", que passou a existir) e na
+    # Fase 2 T1 (o alvo virou "sqlserver", que também passou a existir). Com os três
+    # dialetos implementados não sobra alvo emprestável. Fazendo o `obter_dialeto` falhar
+    # direto, o teste passa a exercitar o que realmente importa — a remediação do doctor —
+    # e não depende de qual dialeto por acaso ainda não existe.
+    _limpar_pg(monkeypatch)
+    for k, v in {"DB_HOST": "h", "DB_DBNAME": "d", "DB_PASSWORD": "p"}.items():
+        monkeypatch.setenv(k, v)
+
+    def _falha(_nome):
+        raise exc
+
+    monkeypatch.setattr("db_mcp.doctor.obter_dialeto", _falha)
+
+    ctx = Contexto(env_file=None, yaml_file="/nao/existe.yaml")
+    r = checar_config(ctx)
+    assert not r.ok
+    assert r.titulo == "Dialeto indisponível"
+    assert ctx.dialeto is None  # as checagens seguintes se PULAM, não estouram
+    with pytest.raises(PularChecagem):
+        checar_tcp(ctx)
+```
+
+- [ ] **Step 2: Rodar**
+
+Run: `uv run pytest tests/test_doctor.py -q`
+Expected: PASS, com os dois casos parametrizados.
+
+Run: `uv run pytest -q`
+Expected: o **único** vermelho é `test_invariante_todo_dialeto[sqlserver]` — o objetivo da Task 1.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/test_doctor.py
+git commit -m "test(doctor): cenario de dialeto indisponivel deixa de depender de dialeto por implementar (T1b)"
 ```
 
 ---
