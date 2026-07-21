@@ -4,44 +4,48 @@ cliente: interno
 produto: —
 no_ar: não
 atividade: ativo
-stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "mysql-connector", "sqlglot"]
+stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "mysql-connector", "pymssql", "sqlglot"]
 ultima_atividade: 2026-07-21
-proxima_acao: "Fase 1 (MySQL) mergeada no main público e tagueada v0.4.0 (CI 7/7 verde). Próximo: planejar a Fase 2 (SQL Server) — herda tsql≠sqlserver, OPENQUERY/OPENROWSET, WAITFOR DELAY e a ausência de reset de sessão"
+proxima_acao: "Fase 2 (SQL Server) CONCLUÍDA e verificada na branch refactor/fase-2-sqlserver (CI 8/8, doctor 6/6 nos TRÊS bancos). Decidir o merge pra main; depois corrigir o STATEMENT_TIMEOUT_MS=0, que desliga o timeout nos três dialetos"
 repo: git+remote
-tags: [mcp, banco-de-dados, open-source, postgres, mysql]
+tags: [mcp, banco-de-dados, open-source, postgres, mysql, sqlserver]
 ---
 # db-mcp
 
 ## Estado atual
-**Fase 1 (MySQL) CONCLUÍDA e verificada em 2026-07-21.** O produto fala com **dois bancos**:
-`db-mcp --dialect {postgres,mysql} doctor` fecha **6/6** nos dois. Versão **0.4.0**.
+**Fase 2 (SQL Server) CONCLUÍDA e verificada em 2026-07-21.** O produto fala com **três bancos**:
+`db-mcp --dialect {postgres,mysql,sqlserver} doctor` fecha **6/6** nos três. Versão **0.5.0**.
 
-**Tudo vive no `main`.** A Fase 1 foi mergeada (`--no-ff`, `2817312`) e tagueada **`v0.4.0`**
-em 2026-07-21; o CI do `main` fechou **7/7** (lint+types, testes em ubuntu/windows × py3.12/3.13,
-integração Postgres e MySQL com `doctor` 6/6 contra banco real). As branches de fase foram
-apagadas — `refactor/fase-1-mysql` já não existe. Repo público **em dia** com o que foi entregue.
+⚠️ O trabalho vive na branch **`refactor/fase-2-sqlserver`** (pushada, CI **8/8**).
+**`main` segue em `2817312`/`v0.4.0`** — o repo é público, então o `main` ainda não mostra o
+SQL Server. **Decidir o merge é a próxima ação.**
 
-Medido localmente com os containers de demo (e reproduzido no CI):
+Medido com os containers **recriados do zero** (`down -v` antes) — 3 healthy em ~20 s:
 
-| | sem banco | Postgres | MySQL |
-|---|---|---|---|
-| suíte (229 testes) | 191 ✅ / 38 ⏭️ | 215 ✅ / 14 ⏭️ | 216 ✅ / 13 ⏭️ |
-| `doctor` | — | **6/6** | **6/6** |
-| recusa de escrita | — | `25006 ReadOnlySqlTransaction` | `42000` / `1142` |
+| | sem banco | Postgres | MySQL | SQL Server |
+|---|---|---|---|---|
+| suíte (275 testes) | 237 ✅ / 38 ⏭️ | 261 ✅ / 14 ⏭️ | 262 ✅ / 13 ⏭️ | 248 ✅ / 27 ⏭️ |
+| `doctor` | — | **6/6** | **6/6** | **6/6** |
+| recusa de escrita | — | `25006 ReadOnlySqlTransaction` | `42000` / `1142` | **`262`** |
 
-`ruff` · `ruff format` · `mypy src` limpos. **`base.py`, `db.py`, `server.py` e `doctor.py` não
-importam `psycopg` nem `mysql`** — o núcleo é dialeto-agnóstico de fato, não de intenção.
-Os 13/14 skips são **auditados** (`-rs`): é o corpus de ataque do *outro* dialeto se pulando,
-e deve mesmo. A união dos dois modos cobre os 229.
+`ruff` · `ruff format` · `mypy src` limpos. Os skips são **auditados** (`-rs`): no modo SQL Server
+são 12 do corpus do Postgres + 13 do MySQL + 2 de integração específica = 27, e nada mais.
 
-**A aposta da Fase 0 se pagou:** o dialeto novo custou **um arquivo** (`dialetos/mysql.py`) e
-**uma linha** no `_REGISTRO`. Nenhum arquivo do núcleo foi tocado para o MySQL existir.
+**O núcleo é dialeto-agnóstico — provado por execução, não por inspeção:** com
+`psycopg`, `mysql` e `pymssql` **bloqueados** em `sys.modules`, os 8 módulos do núcleo
+(`dialetos/base`, `db`, `server`, `doctor`, `config`, `cli`, `guardrails/sql`,
+`guardrails/policy`) importam sem erro. Nenhum deles tem `import` de driver.
+
+🪤 **Mas a aposta se pagou só EM PARTE, e isso é o achado mais importante da fase.** O dialeto
+custou um arquivo (`dialetos/sqlserver.py`) + uma linha no `_REGISTRO` — porém, **diferente das
+Fases 0 e 1, o núcleo TEVE que mudar**: `doctor.py` (+16) e `guardrails/policy.py` (+12).
+Ver "O que um dialeto novo faz com o núcleo", abaixo.
 
 ## O que é
 Servidor MCP somente-leitura para bancos SQL. Dá a agentes de IA (Claude Desktop, Claude Code,
 automações) acesso de introspecção e `SELECT`, sem escrever, alterar schema ou derrubar o banco.
 
-Um repo, um pacote, dialetos como módulos: **`postgres` e `mysql` prontos**, `sqlserver` na Fase 2.
+Um repo, um pacote, dialetos como módulos: **`postgres`, `mysql` e `sqlserver` prontos**.
 O código não conhece nenhum banco específico — você aponta pelo config. Nenhum host, senha ou nome
 de tabela real fica no repositório.
 
@@ -49,26 +53,32 @@ de tabela real fica no repositório.
 Python 3.11+ com [`uv`](https://docs.astral.sh/uv/). Não está no PyPI — instala-se clonando.
 
 ```bash
-uv sync --extra mysql                          # o driver do MySQL é extra OPCIONAL
+uv sync --all-extras                           # os drivers de MySQL e SQL Server sao extras OPCIONAIS
 docker compose up -d                           # Postgres de demo na 5433
 docker compose --profile mysql up -d           # MySQL de demo na 3307
 uv run db-mcp --env .env.demo doctor           # 6/6
 uv run db-mcp --env .env.demo-mysql doctor     # 6/6
-docker compose --profile mysql down -v         # derruba e apaga tudo
+docker compose --profile sqlserver up -d       # SQL Server de demo na 1434
+uv run db-mcp --env .env.demo-sqlserver doctor  # 6/6
+# 🪤 derrubar UM servico: `docker compose rm -sfv sqlserver`
+# (`--profile X down -v` derruba TAMBEM os servicos sem `profiles:` — medido)
 ```
 
 **Testes** — a suíte é a mesma; o banco apontado decide o que roda:
 ```bash
-uv run pytest -q                                    # 191/38 (integração se auto-pula)
+uv run pytest -q                                    # 237/38 (integração se auto-pula)
 DB_HOST=localhost DB_PORT=5433 DB_DBNAME=demo DB_USER=mcp_ro DB_PASSWORD=mcp_ro_demo \
-  uv run pytest -q                                  # 215/14
+  uv run pytest -q                                  # 261/14
 DIALETO=mysql DB_HOST=127.0.0.1 DB_PORT=3307 DB_DBNAME=demo DB_USER=mcp_ro \
-  DB_PASSWORD=mcp_ro_demo uv run pytest -q          # 216/13
+  DB_PASSWORD=mcp_ro_demo uv run pytest -q          # 262/13
+DIALETO=sqlserver DB_HOST=127.0.0.1 DB_PORT=1434 DB_DBNAME=demo DB_USER=mcp_ro \
+  DB_PASSWORD='Mcp_ro_demo_2026!' uv run pytest -q  # 248/27
 uv run ruff check . && uv run ruff format --check . && uv run mypy src
 ```
 
-⚠️ **Rode as DUAS suítes.** Vários bugs desta fase passavam sem banco e só apareceram contra o
-banco vivo. O gate da integração é `.env` existir **ou** `DB_HOST` no ambiente.
+⚠️ **Rode as QUATRO suítes.** Não é zelo: na Fase 2, **três bugs do NÚCLEO** passavam verdes sem
+banco e só apareceram contra o SQL Server vivo. O gate da integração é `.env` existir **ou**
+`DB_HOST` no ambiente.
 
 ## Estrutura
 ```
@@ -79,17 +89,19 @@ src/db_mcp/
 ├── doctor.py          as 6 checagens — não importa driver nenhum
 ├── cli.py             `db-mcp` + `--dialect` (chega no doctor desde a Fase 1)
 ├── guardrails/        sql.py (validador) · policy.py (allowlist + LIMIT) · ratelimit.py
-└── dialetos/          base.py (Protocol) · postgres.py · mysql.py   ← sqlserver entra aqui
+└── dialetos/          base.py (Protocol) · postgres.py · mysql.py · sqlserver.py
 ```
 
 **Ordem de leitura pra retomar:** [spec do design](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)
-→ [plano da Fase 1](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md) (feito, com os
+→ [spec da Fase 2](docs/superpowers/specs/2026-07-21-db-mcp-fase-2-sqlserver-design.md)
+→ [plano da Fase 2](docs/superpowers/plans/2026-07-21-db-mcp-fase-2-sqlserver.md) (feito, com os
 resultados medidos no fim). Manual do produto em `docs/`.
 
 ## Ambiente & acessos
-- **Nenhum deployment real.** Só os dois containers de demonstração.
+- **Nenhum deployment real.** Só os três containers de demonstração.
 - **Credenciais dos demos são FAKE e públicas** — `mcp_ro`/`mcp_ro_demo` em `localhost:5433`
-  (Postgres) e `127.0.0.1:3307` (MySQL). Estão em `.env.demo`, `.env.demo-mysql` e nos
+  (Postgres), `127.0.0.1:3307` (MySQL) e `mcp_ro`/`Mcp_ro_demo_2026!` em `127.0.0.1:1434`
+  (SQL Server). Estão em `.env.demo`, `.env.demo-mysql`, `.env.demo-sqlserver` e nos
   `demo/init*/03-mcp-ro.sql`. Não são segredo, são parte do exemplo.
 - **Segredos reais** vão em `.env` / `config.yaml`, ambos git-ignored; cada ambiente em
   `deployments/<ambiente>.md` (git-ignored). Ponteiro pro cofre `CHAVES/` — nunca inline aqui.
@@ -127,6 +139,25 @@ principal, e **nunca conceder `FILE`** (habilita `INTO OUTFILE`/`load_file`).
 pool deixaria as conexões **graváveis e sem timeout do 2º checkout em diante, em silêncio**.
 Por isso `_PoolMySQL.connection()` reaplica **a cada checkout** — e
 `test_mysql_reaplica_read_only_a_cada_checkout` existe para impedir que alguém "simplifique" isso.
+
+### 🪤 O que um dialeto novo faz com o núcleo (a lição da Fase 2)
+**"Um dialeto = um arquivo + uma linha" vale para o MÓDULO DO DIALETO, não para os cadeados
+compartilhados.** Já quebrou duas vezes seguidas, e sempre pelo mesmo motivo: **o núcleo carrega
+suposições invisíveis assadas pelos dialetos que já existiam.** Um dialeto novo não *acrescenta*
+código ao núcleo — ele **expõe** o que estava presumido ali. Nenhum plano pega isso; só banco vivo.
+
+As três suposições que o SQL Server derrubou (todas medidas, nenhuma visível contra mock):
+- **`doctor.py`** — `checar_latencia` mandava `SELECT 1` cru. O cursor `as_dict=True` do pymssql
+  estoura com `ColumnsWithoutNamesError` numa **coluna sem nome** (virou `SELECT 1 AS um`).
+- **`doctor.py`** — a mensagem de `checar_somente_leitura` lia `.sqlstate`, que o pymssql **não
+  expõe**: o número `262` sumia da tela, justamente o que o operador precisa ver.
+- **`guardrails/policy.py`** 🔴 — `injetar_limit` tinha *fast-path* devolvendo o **SQL cru** quando
+  já havia limite dentro do teto. O sqlglot faz parse **leniente** e aceita `LIMIT n` mesmo com
+  `read="tsql"`, então query com `LIMIT` (sintaxe que não existe no T-SQL) passava intocada e o
+  servidor recusava com `Incorrect syntax near '1'`.
+
+Some-se a isso o `catalog` (`26f2bff`), que também era do núcleo. **Ao planejar a próxima fase,
+orce mudança de núcleo em vez de prometer que não haverá.**
 
 ### 🔒 O invariante do um-banco-só (2026-07-21)
 **Qualquer referência que nomeie um catalog (`banco.schema.tabela` ou
@@ -213,10 +244,15 @@ pra **3** (`master`/`tempdb`/o próprio — o piso do SQL Server, não dá pra z
 - [x] **Merge da Fase 1 pro `main` (2026-07-21).** `--no-ff` em `2817312`, tag **`v0.4.0`**,
   CI do `main` **7/7**. Branches de fase apagadas (local e remoto). O repo público passou a
   mostrar o MySQL.
-- [ ] 🎯 **Fase 2 — SQL Server.** Plano próprio. Herda os gotchas do `tsql`/`sqlserver`,
-  `OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE` (passam pelo validador com raiz `Select`),
-  `WAITFOR DELAY` (só `ParseError`), nome de 3 partes cross-database, e a ausência de reset de
-  sessão. A tabela dos cadeados já tem a coluna dele — preenchê-la quando existir.
+- [x] **Fase 2 — SQL Server (2026-07-21).** 9 tasks + 3 correções pós-revisão,
+  `010958b..74eeb49`. Esqueleto → blocklist e corpus → conexão **sem pool** → `erro_readonly`
+  (`262`, nunca o genérico `229`) → contrato completo → demo com os `DENY` medidos → CI 8/8 →
+  docs honestas → verificação final. Resultados medidos no fim do
+  [plano](docs/superpowers/plans/2026-07-21-db-mcp-fase-2-sqlserver.md); decisões e medições no
+  [spec](docs/superpowers/specs/2026-07-21-db-mcp-fase-2-sqlserver-design.md).
+- [ ] 🎯 **Decidir o merge da `refactor/fase-2-sqlserver` pro `main`.** O repo é público e o
+  `main` (`2817312`/`v0.4.0`) mostra só até a Fase 1 — quem chega no GitHub não vê o SQL Server.
+  Fase 2 está verde (CI 8/8) e pushada. Ao mergear: tag `v0.5.0` e apagar a branch.
 - [ ] 🔴 **`STATEMENT_TIMEOUT_MS=0` desliga o timeout nos TRÊS dialetos, em silêncio.**
   Achado medindo durante a Fase 2 (2026-07-21); **é do núcleo, não do SQL Server**, e a
   decisão foi corrigir **depois** da Fase 2, em commit próprio, para não misturar escopo.
