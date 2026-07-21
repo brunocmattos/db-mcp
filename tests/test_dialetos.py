@@ -5,6 +5,23 @@ from db_mcp.dialetos import DIALETOS_IMPLEMENTADOS, obter_dialeto
 from db_mcp.dialetos.base import Perfil
 
 
+def dialeto_ou_skip(nome: str):
+    """Instancia o dialeto, ou pula se o driver dele não está instalado.
+
+    Cada dialeto tem um extra OPCIONAL (`uv sync --extra mysql`) e o driver é
+    importado no `__init__` — de propósito, pra `obter_dialeto` falhar cedo e o doctor
+    dizer "instale o extra". Sem este guarda, registrar o mysql quebraria a suíte de
+    quem clonou e rodou só `uv sync` (medido: ImportError, não skip).
+
+    ⚠️ O CI DEVE instalar TODOS os extras — senão este skip silencia justamente o gate
+    que existe pra pegar dialeto novo mal escrito.
+    """
+    try:
+        return obter_dialeto(nome)
+    except ImportError as e:
+        pytest.skip(f"driver do dialeto {nome!r} não instalado ({e}); use --extra {nome}")
+
+
 def test_obter_dialeto_postgres():
     d = obter_dialeto("postgres")
     assert d.nome == "postgres"
@@ -45,7 +62,7 @@ def test_invariante_todo_dialeto(nome):
     # Gate pra TODO dialeto futuro (Fases 1 e 2), não só o postgres. Enumerado a partir
     # do _REGISTRO (fonte única): quem acrescentar um dialeto sem satisfazer isto quebra
     # o CI, não uma query em produção. Cobre os dois traps documentados no CLAUDE.md:
-    d = obter_dialeto(nome)
+    d = dialeto_ou_skip(nome)
     # (a) sqlglot_dialeto tem que ser um nome que o sqlglot CONHECE — pega o clássico
     #     "sqlserver" (ValueError: Unknown dialect) escrito no lugar de "tsql".
     assert sqlglot.transpile("SELECT 1", read=d.sqlglot_dialeto, write=d.sqlglot_dialeto) == [

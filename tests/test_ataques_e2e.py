@@ -33,6 +33,33 @@ ATAQUES_POSTGRES = [
     ("SELECT query_to_xml('SELECT * FROM clientes',true,true,'')", SomenteLeitura),
 ]
 
+ATAQUES_MYSQL = [
+    ("UPDATE clientes SET cidade='x'", SomenteLeitura),
+    ("CREATE TABLE zz (n int)", SomenteLeitura),
+    ("SELECT 1; DROP TABLE clientes", SqlInvalido),
+    ("SELECT * INTO nova FROM clientes", SomenteLeitura),
+    ("SELECT * FROM clientes FOR UPDATE", SomenteLeitura),
+    ("REPLACE INTO clientes (nome) VALUES ('x')", SomenteLeitura),
+    # exfiltração: escreve arquivo no servidor (vira .php no docroot com FILE concedido)
+    ("SELECT * FROM clientes INTO OUTFILE '/tmp/vaza.txt'", SqlInvalido),
+    ("SELECT * FROM clientes INTO DUMPFILE '/tmp/vaza.bin'", SqlInvalido),
+    ("SELECT load_file('/etc/passwd')", SomenteLeitura),
+    # crase, não aspa dupla: no MySQL aspas duplas são STRING, e o caso viraria
+    # ParseError em vez de provar que a blocklist alcança nome citado (medido)
+    ("SELECT `load_file`('/etc/passwd')", SomenteLeitura),
+    ("SELECT sleep(30)", SomenteLeitura),
+    ("SELECT benchmark(100000000, md5('x'))", SomenteLeitura),
+    # lock nomeado: efeito colateral que PERSISTE na conexão devolvida ao pool
+    ("SELECT get_lock('trava', 30)", SomenteLeitura),
+]
+
+# (dialeto, sql, exceção). A união é montada no import (parametrize precisa dela na
+# coleta); cada caso se pula se a suíte estiver rodando contra o OUTRO banco. É assim
+# que `pytest` com DB_* de Postgres e com DB_* de MySQL exercita a sua própria tabela.
+ATAQUES_POR_DIALETO = [("postgres", sql, exc) for sql, exc in ATAQUES_POSTGRES] + [
+    ("mysql", sql, exc) for sql, exc in ATAQUES_MYSQL
+]
+
 
 @pytest.fixture
 def nucleo():
@@ -41,8 +68,10 @@ def nucleo():
     n.db.close()
 
 
-@pytest.mark.parametrize("sql,esperado", ATAQUES_POSTGRES)
-def test_ataque_e_barrado_no_caminho_real(nucleo, sql, esperado):
+@pytest.mark.parametrize("dialeto,sql,esperado", ATAQUES_POR_DIALETO)
+def test_ataque_e_barrado_no_caminho_real(nucleo, dialeto, sql, esperado):
+    if nucleo.dialeto.nome != dialeto:
+        pytest.skip(f"corpus de {dialeto}; a suíte está rodando contra {nucleo.dialeto.nome}")
     with pytest.raises(esperado):
         nucleo.consultar(sql)
 
