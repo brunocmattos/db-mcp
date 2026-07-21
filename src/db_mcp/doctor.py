@@ -265,10 +265,18 @@ def checar_somente_leitura(ctx: Contexto) -> Resultado:
         # confirmado", que seria o falso positivo perigoso num cadeado que falha aberta.
         if not d.erro_readonly(e):
             raise
+        # MEDIDO: pymssql (SQL Server) não expõe `.sqlstate` — sem o fallback pro
+        # primeiro item de `.args` (onde o pymssql põe o número, ex. 262), a mensagem
+        # perdia o único dado que identifica a recusa e sobrava só "OperationalError".
+        # Postgres/MySQL têm `.sqlstate` de verdade, então nunca caem no fallback.
+        codigo = getattr(e, "sqlstate", None)
+        if not codigo:
+            args: tuple[object, ...] = getattr(e, "args", ())
+            codigo = args[0] if args else ""
         return Resultado(
             True,
             "Somente-leitura confirmado",
-            f"write recusado: {getattr(e, 'sqlstate', '')} {type(e).__name__}".strip(),
+            f"write recusado: {codigo} {type(e).__name__}".strip(),
         )
     return Resultado(  # voltou sem erro = a escrita PASSOU
         False,
@@ -323,7 +331,11 @@ def checar_latencia(ctx: Contexto) -> Resultado:
     with ctx.dialeto.linhas_como_dict(ctx.conn) as cur:
         for _ in range(5):
             t0 = time.perf_counter()
-            cur.execute("SELECT 1")
+            # AS um: coluna sem nome. MEDIDO — o cursor as_dict do pymssql (SQL Server)
+            # levanta ColumnsWithoutNamesError num "SELECT 1" cru; Postgres/MySQL não se
+            # importam. Alias é SQL genérico, não conhecimento de dialeto — doctor.py
+            # continua sem importar driver nenhum.
+            cur.execute("SELECT 1 AS um")
             cur.fetchone()
             amostras.append((time.perf_counter() - t0) * 1000)
     amostras.sort()
