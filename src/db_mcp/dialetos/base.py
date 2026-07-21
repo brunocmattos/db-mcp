@@ -44,9 +44,19 @@ class Dialeto(Protocol):
     funcs_proibidas: frozenset[str]
     schema_padrao: str
     porta_padrao: int  # 5432≠3306: `db_port` é opcional e cada dialeto aplica a sua
-    erros_readonly: tuple[type[Exception], ...]
 
     def criar_pool(self, s: Settings) -> PoolLike: ...
+
+    def erro_readonly(self, e: Exception) -> bool:
+        """True se a exceção do driver significa "escrita recusada por ser read-only".
+
+        Predicado, não tupla de classes: o mysql-connector não dá classe própria aos
+        erros 1792 (read-only transaction) e 1142 (sem privilégio) — distingui-los exige
+        olhar o `.errno`. Casar por classe base lá pegaria erro de banco QUALQUER e o
+        doctor daria "somente-leitura confirmado" para uma conexão gravável — o falso
+        positivo perigoso, no cadeado que já falha aberta.
+        """
+        ...
 
     def conectar_doctor(self, s: Settings) -> Any:
         """Conexão avulsa (fora do pool) para o doctor, em autocommit.

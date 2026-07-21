@@ -93,10 +93,15 @@ class DialetoPostgres:
         import psycopg  # lazy: o extra `postgres` só é exigido de quem usa postgres
 
         self._psycopg = psycopg
-        self.erros_readonly: tuple[type[Exception], ...] = (
+        self._erros_readonly = (
             psycopg.errors.InsufficientPrivilege,  # 42501 — role sem privilégio
             psycopg.errors.ReadOnlySqlTransaction,  # 25006 — transação READ ONLY
         )
+
+    def erro_readonly(self, e: Exception) -> bool:
+        # No Postgres as duas condições TÊM classe própria; o predicado é só isinstance.
+        # No MySQL (T5) será `errno in {1792, 1142}` — daí o contrato ser predicado.
+        return isinstance(e, self._erros_readonly)
 
     def criar_pool(self, s: Settings) -> PoolLike:
         import psycopg
