@@ -118,6 +118,6 @@ passar.
 ## O que ele deliberadamente não faz
 
 Escrever no banco (fora do escopo atual — a escrita terá spec próprio) ou embutir consultas de
-negócio prontas. Falar com outros bancos não é um "nunca": **MySQL já funciona**; o SQL Server
-está em desenvolvimento (fase 2 do design multi-dialeto) e hoje ainda não funciona de
-verdade. O objetivo é ser uma ferramenta genérica e segura de leitura.
+negócio prontas. Falar com outros bancos nunca foi um "nunca": **PostgreSQL, MySQL e SQL Server
+já funcionam**, os três com `doctor` fechando 6/6 contra banco real. O objetivo é ser uma
+ferramenta genérica e segura de leitura.
