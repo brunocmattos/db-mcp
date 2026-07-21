@@ -32,14 +32,15 @@ Fase 1 saindo do papel.
   o `LIKE 'pg_%'` e estourar (`only '%s' … allowed as placeholders`). Vazio → `None` (sem binds = sem
   interpolação). **A suíte sem banco passava** — só o e2e contra o Postgres vivo pegou. Regressão em teste.
 
-**Riscos / quem afeta:** ⚠️ **Nada em produção** (`no_ar: não`, nenhum usuário). ⚠️ **A branch
-`refactor/fase-1-mysql` NÃO foi pushada** — os 2 commits da T1/T2 estão só nesta máquina, **sem backup
-off-machine**. 📌 O repo é **público**: o `main` já mostra a Fase 0 + o plano revisado. 📌 A skill externa
-`setup-db-mcp` (fora do repo) ainda escreve chaves `pg_*` → vai gerar config quebrada até ser atualizada.
+**Riscos / quem afeta:** ⚠️ **Nada em produção** (`no_ar: não`, nenhum usuário). ✅ A branch
+`refactor/fase-1-mysql` foi **pushada no fim da sessão** (decisão do Bruno no `/fechar`) — T1/T2 e os
+docs com backup off-machine. 📌 O repo é **público**: o `main` mostra a Fase 0 + o plano revisado; a WIP
+da Fase 1 fica na branch. 📌 A skill externa `setup-db-mcp` (fora do repo) ainda escreve chaves `pg_*`
+→ vai gerar config quebrada até ser atualizada.
 
 **Próximo:** T3 (doctor dialeto-aware) e T4 (`erros_readonly` → predicado), Postgres-prep rápidas; depois
 a **T5 (`dialetos/mysql.py`)**, que **exige medir o `pool_reset_session` do driver antes de codar** — é o
-cadeado que *falha aberta*. E decidir se a branch vai pro remoto.
+cadeado que *falha aberta*.
 
 ## 2026-07-20 · Manutenção — Merge de main, sessões paralelas, e plano da Fase 1
 **O quê:** fechar o ciclo da Fase 0 (merge pro `main` público) e dar início à Fase 1 escrevendo o
