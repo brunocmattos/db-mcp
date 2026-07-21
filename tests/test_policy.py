@@ -163,6 +163,16 @@ def test_injetar_limit_tsql_respeita_top_dentro_do_teto():
     assert injetar_limit(sql, 100, "tsql") == sql
 
 
+def test_injetar_limit_tsql_converte_limit_para_top_mesmo_dentro_do_teto():
+    # Regressão MEDIDA contra SQL Server real (T6): o sqlglot faz parse leniente de
+    # `LIMIT n` mesmo com read="tsql", então uma query com LIMIT (sintaxe alheia ao
+    # T-SQL) e valor dentro do teto batia no fast-path e saía intocada — o pymssql
+    # recusava com "Incorrect syntax near '1'" porque LIMIT não existe no SQL Server.
+    out = injetar_limit("SELECT * FROM clientes LIMIT 1", 100, "tsql")
+    assert "TOP 1" in out.upper()
+    assert "LIMIT" not in out.upper()
+
+
 def test_injetar_limit_no_mysql_usa_limit():
     out = injetar_limit("SELECT * FROM t", 100, "mysql")
     assert "LIMIT 100" in out.upper()
