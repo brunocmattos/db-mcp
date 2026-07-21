@@ -127,6 +127,22 @@ pool deixaria as conexões **graváveis e sem timeout do 2º checkout em diante,
 Por isso `_PoolMySQL.connection()` reaplica **a cada checkout** — e
 `test_mysql_reaplica_read_only_a_cada_checkout` existe para impedir que alguém "simplifique" isso.
 
+### 🔒 O invariante do um-banco-só (2026-07-21)
+**Qualquer referência que nomeie um catalog (`banco.schema.tabela` ou
+`servidor.banco.schema.tabela`) é RECUSADA**, inclusive com `allowlist=["*"]` — o `*`
+desliga a allowlist, não o invariante. A regra não olha a config, o que a torna auditável
+sem saber em que banco estamos, e a checagem anda por `find_all` e **não** pela análise de
+escopo (um cadeado não pode depender do `traverse_scope`, que tem fallback por poder falhar).
+
+**Por que existiu o buraco:** `tabelas_referenciadas` montava o nome com `t.db + t.name` e
+**descartava o `t.catalog`** — `outrodb.public.clientes` virava `public.clientes` e casava
+com a entrada feita pro banco corrente. Era **latente, não explorável** (medido: Postgres dá
+`cross-database references are not implemented`, MySQL dá `1064`), mas o **SQL Server executa
+nome de 3 partes** — a Fase 2 abriria o buraco no dia em que existisse. Consequência assumida:
+`demo.public.clientes` (o próprio banco, SQL válido no PG) também passa a ser recusado.
+⚠️ Este foi o **primeiro caso em que um dialeto novo exigiu mexer no núcleo** — o padrão
+"um arquivo + uma linha" vale pro dialeto, não pros cadeados compartilhados.
+
 ### Gotchas vivos
 - **Repo PÚBLICO** — o único do portfólio. Pense antes de commitar.
 - 🪤 **`"sqlserver"` NÃO é nome de dialeto do sqlglot — lá se escreve `tsql`** (medido), e

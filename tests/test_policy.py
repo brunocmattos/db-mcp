@@ -172,3 +172,63 @@ def test_tabelas_referenciadas_le_no_dialeto_alvo():
     # A allowlist é o cadeado nº 3(b): ler no dialeto errado é ler outra query.
     # Backtick é MySQL — em postgres isto é ParseError, não uma tabela chamada `t`.
     assert tabelas_referenciadas("SELECT * FROM `pedidos`", "mysql") == {"pedidos"}
+
+
+# --- Cross-database: o db-mcp fala com UM banco ------------------------------------
+# MEDIDO em 2026-07-21: `tabelas_referenciadas` montava o nome com `t.db` + `t.name` e
+# DESCARTAVA o `t.catalog`. `outrodb.public.clientes` era vista como `public.clientes` e
+# casava com a entrada da allowlist feita para o banco CORRENTE — o cadeado nº 3 liberava
+# um banco que ninguém liberou.
+#
+# Era latente, não explorável, e é por isso que passou: medido contra os bancos vivos, o
+# Postgres recusa ("cross-database references are not implemented") e o MySQL dá erro de
+# sintaxe (1064) — o cadeado nº 1 segurava. Mas o **SQL Server EXECUTA** nome de 3 partes,
+# e um login costuma enxergar vários bancos da mesma instância; nome de 4 partes sai da
+# instância inteira via linked server. A Fase 2 abriria o buraco no dia em que existisse.
+#
+# A regra: qualquer referência que carregue catalog é RECUSADA. Não é "compare com o banco
+# configurado" — é um invariante do produto, o que o torna auditável sem olhar a config.
+
+
+def test_allowlist_recusa_catalog_com_entrada_qualificada():
+    with pytest.raises(ForaDaAllowlist):
+        checar_allowlist("SELECT * FROM outrodb.public.clientes", ["public.clientes"], PG)
+
+
+def test_allowlist_recusa_catalog_com_entrada_nao_qualificada():
+    # O pior caso, e o mais comum: uma entrada curta libera aquele nome em qualquer
+    # SCHEMA — nunca em outro BANCO. Sem esta, incluir o catalog no nome não resolveria
+    # nada, porque `_tabela_permitida` casa pelo ÚLTIMO segmento.
+    with pytest.raises(ForaDaAllowlist):
+        checar_allowlist("SELECT * FROM outrodb.public.clientes", ["clientes"], PG)
+
+
+def test_allowlist_recusa_linked_server_de_quatro_partes():
+    # servidor.banco.schema.tabela: sai da instância inteira.
+    with pytest.raises(ForaDaAllowlist):
+        checar_allowlist("SELECT * FROM srv.folha.dbo.clientes", ["clientes"], "tsql")
+
+
+def test_catalog_e_recusado_mesmo_com_allowlist_estrela():
+    # `*` desliga a allowlist, não o invariante do produto: "um servidor, um banco".
+    # Se `*` liberasse cross-database, a proteção sumiria justamente na config mais
+    # usada — falha ABERTA no default.
+    with pytest.raises(ForaDaAllowlist):
+        checar_allowlist("SELECT * FROM outrodb.public.clientes", ["*"], PG)
+
+
+def test_catalog_do_proprio_banco_tambem_e_recusado():
+    # Consequência assumida da regra simples: `demo.public.clientes` é SQL válido no
+    # Postgres quando `demo` é o banco corrente, e passa a ser recusado. A alternativa
+    # (comparar com o db_dbname) exigiria a config aqui dentro, ampliando a superfície
+    # de um cadeado de segurança. Quem precisa disto escreve o nome com 2 partes.
+    with pytest.raises(ForaDaAllowlist):
+        checar_allowlist("SELECT * FROM demo.public.clientes", ["public.clientes"], PG)
+
+
+def test_tabelas_referenciadas_preserva_o_catalog():
+    # A causa-raiz, testada direto: o nome extraído tem que CARREGAR o catalog, senão
+    # a informação já se perdeu antes de a allowlist decidir.
+    assert tabelas_referenciadas("SELECT * FROM outrodb.public.clientes", PG) == {
+        "outrodb.public.clientes"
+    }

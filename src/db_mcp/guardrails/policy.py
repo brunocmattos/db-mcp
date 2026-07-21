@@ -9,13 +9,19 @@ from sqlglot.optimizer.scope import traverse_scope
 from ..errors import ForaDaAllowlist
 
 
+def _nome(t: exp.Table) -> str:
+    """Nome renderizado da tabela, preservando `catalog` e `db` quando existirem.
+
+    O `catalog` entra de propósito. Sem ele, `outrodb.public.clientes` era reduzida a
+    `public.clientes` e casava com a entrada de allowlist feita pro banco CORRENTE — o
+    cadeado nº 3 liberando um banco que ninguém liberou.
+    """
+    return ".".join(p for p in (t.catalog, t.db, t.name) if p)
+
+
 def _tabelas_todas(arvore: exp.Expression) -> set[str]:
     """Modo conservador: toda tabela citada é tratada como real (checa tudo na allowlist)."""
-    nomes: set[str] = set()
-    for t in arvore.find_all(exp.Table):
-        schema = t.db
-        nomes.add(f"{schema}.{t.name}" if schema else t.name)
-    return nomes
+    return {_nome(t) for t in arvore.find_all(exp.Table)}
 
 
 def tabelas_referenciadas(sql: str, dialeto: str) -> set[str]:
@@ -39,8 +45,7 @@ def tabelas_referenciadas(sql: str, dialeto: str) -> set[str]:
             fonte = escopo.sources.get(t.alias_or_name)
             if fonte is not None and not isinstance(fonte, exp.Table):
                 continue  # resolve pra um CTE/subquery — não é tabela do banco
-            schema = t.db
-            nomes.add(f"{schema}.{t.name}" if schema else t.name)
+            nomes.add(_nome(t))
     return nomes
 
 
@@ -61,7 +66,32 @@ def _tabela_permitida(tab: str, permitidas: set[str]) -> bool:
     return tab.split(".")[-1] in nao_qualificadas
 
 
+def _recusar_cross_database(sql: str, dialeto: str) -> None:
+    """Recusa qualquer referência que nomeie um catalog (banco) — 3 ou 4 partes.
+
+    Invariante do produto: **o db-mcp aponta pra UM banco**. Citar outro é recusado, e a
+    regra não olha a config — o que a torna auditável sem saber em que banco estamos.
+
+    Anda por `find_all` e NÃO pela análise de escopo de propósito: um cadeado de segurança
+    não pode depender do `traverse_scope`, que tem fallback justamente por poder falhar.
+    Um CTE nunca gera falso positivo aqui porque nome de CTE é um identificador único —
+    não carrega catalog.
+
+    Medido em 2026-07-21: no Postgres e no MySQL isto é latente (o servidor recusa com
+    "cross-database references are not implemented" e com erro 1064), mas o SQL Server
+    EXECUTA nome de 3 partes, e o de 4 partes sai da instância via linked server.
+    """
+    arvore = cast(exp.Expression, sqlglot.parse_one(sql, read=dialeto))
+    for t in arvore.find_all(exp.Table):
+        if t.catalog:
+            raise ForaDaAllowlist(f"referência a outro banco não é permitida: {_nome(t)}")
+
+
 def checar_allowlist(sql: str, allowlist: list[str], dialeto: str) -> None:
+    # Antes do "*": o `*` desliga a ALLOWLIST, não o invariante de um-banco-só. Se ele
+    # liberasse cross-database, a proteção sumiria na config mais usada — falha ABERTA
+    # justamente no default.
+    _recusar_cross_database(sql, dialeto)
     if "*" in allowlist:
         return
     permitidas = set(allowlist)
