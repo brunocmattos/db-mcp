@@ -449,6 +449,51 @@ git commit -m "feat(sqlserver): funcs_proibidas + corpus de ataque do T-SQL (T2)
 
 ---
 
+### Task 2b: honestidade da blocklist (achados da revisão)
+
+> **Feita em `8050883`.** A revisão independente da T2 mediu contra um SQL Server 2022 real e
+> derrubou uma afirmação deste plano. Registrado aqui porque a lição vale para quem mantiver a
+> lista — a versão final do comentário está em `src/db_mcp/dialetos/sqlserver.py`.
+
+**A lista tem dois grupos com forças MUITO diferentes, e a primeira redação não distinguia:**
+
+*Grupo A — a blocklist é mesmo quem barra.* `openquery`, `opendatasource`, `openrowset`,
+`fn_get_audit_file`, `fn_trace_gettable`, `fn_my_permissions`, `fn_dblog`, `fn_dump_dblog`.
+Executam como função/rowset dentro de um `SELECT`, chegam como `exp.Anonymous`, passam a
+checagem de raiz. **Apagar uma entrada daqui abre um buraco real.**
+
+*Grupo B — sobra-defesa deliberada.* `xp_cmdshell`, `xp_regread`, `xp_regwrite`, `xp_dirtree`,
+`xp_fileexist`, `xp_subdirs`, `xp_msver`. São **stored procedures estendidas** — só invocáveis
+por `EXEC`, nunca como função num `SELECT`. Medido **como `sa`**, para eliminar o GRANT como
+variável:
+
+```
+SELECT * FROM xp_cmdshell('dir')  ->  Msg 208: Invalid object name 'xp_cmdshell'.
+SELECT xp_cmdshell('dir')         ->  Msg 195: 'xp_cmdshell' is not a recognized built-in function name.
+```
+
+O motor recusa a sintaxe para **qualquer** usuário; a forma real (`EXEC xp_cmdshell ...`) morre
+na checagem de raiz. **Apagar uma entrada daqui não muda nada.** Ficam na lista porque
+sobra-defesa é barata — mas dizer que "só a blocklist as pega" era falso.
+
+**Os três outros achados, todos corrigidos no mesmo commit:**
+
+1. **`openrowset` estava na lista sem teste que provasse o caminho até ela.** As formas do
+   corpus (credencial com `;`, e `BULK`) morrem no `ParseError`. A forma **padrão de 3
+   argumentos** — a técnica clássica de escalonamento via loopback — parseia e chega na
+   blocklist. Sem teste dela, apagar `"openrowset"` do frozenset deixava a suíte **inteira
+   verde**. Provado por TDD: removendo a entrada, 3 casos falham com `DID NOT RAISE`.
+2. **Faltavam `fn_dblog` e `fn_dump_dblog`** — leem o log de transação (expõem valores de linhas
+   alteradas/apagadas), mesma categoria das já incluídas. Entraram com teste.
+3. **Dois marcadores de task errados** no esqueleto: `probar_escrita` e `sql_probe_escrita`
+   nascem juntos na **Task 4** (o primeiro chama o segundo).
+
+⚠️ **Regra que fica para a Task 6 em diante:** ao acrescentar nome à blocklist, acrescente
+também um caso ao corpus que prove o caminho **até ela**. Entrada sem teste é entrada que
+alguém apaga sem a suíte notar.
+
+---
+
 ### Task 3: Conexão sem pool
 
 **Files:**
