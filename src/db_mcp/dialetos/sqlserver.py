@@ -8,9 +8,34 @@ if TYPE_CHECKING:
     from ..config import Settings
     from .base import PoolLike
 
-# Placeholder proposital: a Task 2 preenche. Vazia aqui para o gate de invariante
-# FALHAR primeiro (é o teste que prova que o gate funciona).
-FUNCS_PROIBIDAS_SQLSERVER: frozenset[str] = frozenset()
+# O mecanismo (exp.Anonymous + nome) fica no validador; só a lista é do dialeto.
+# Defesa em profundidade: o limite real é o GRANT (medido: CREATE recusa com 262).
+# Esta lista existe pro que o GRANT NÃO barra.
+#
+# Enumerada, NÃO um prefixo "xp_*": um prefixo daria falsa cobertura (as fn_* ficariam
+# de fora) e barraria nome de usuário que por acaso comece com xp_.
+FUNCS_PROIBIDAS_SQLSERVER = frozenset(
+    {
+        # saem do banco/instância — o vetor mais grave do SQL Server. MEDIDO: chegam
+        # como exp.Anonymous e passam a checagem de raiz; só a blocklist os pega.
+        "openquery",
+        "opendatasource",
+        "openrowset",
+        # execução de comando no SO e leitura de disco/registro
+        "xp_cmdshell",
+        "xp_regread",
+        "xp_regwrite",
+        "xp_dirtree",
+        "xp_fileexist",
+        "xp_subdirs",
+        "xp_msver",
+        # leem trilha de auditoria e trace do servidor
+        "fn_get_audit_file",
+        "fn_trace_gettable",
+        # enumera permissões — reconhecimento
+        "fn_my_permissions",
+    }
+)
 
 
 class DialetoSqlServer:
