@@ -41,10 +41,11 @@ def main() -> None:
     if args.cmd == "doctor":
         from .doctor import executar_doctor
 
-        # FASE 1: --dialect não chega aqui (o doctor carrega o Settings por conta
-        # própria). Inofensivo enquanto `postgres` é o único dialeto que resolve;
-        # ao adicionar o MySQL, propagar o override ou a flag passa a mentir.
-        raise SystemExit(executar_doctor(args.env, args.config, args.color))
+        # O doctor carrega o Settings por conta própria, então o --dialect precisa ser
+        # propagado explicitamente. Enquanto só `postgres` resolvia isso era inofensivo;
+        # com o MySQL registrado, a flag passaria a MENTIR em silêncio (rodaria as 6
+        # checagens contra o dialeto errado e diria que está tudo bem).
+        raise SystemExit(executar_doctor(args.env, args.config, args.color, args.dialect))
 
     # default (sem subcomando) e "run": sobe o servidor (comportamento da Fase 1)
     s = Settings.load(env_file=args.env, yaml_file=args.config)

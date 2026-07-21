@@ -17,8 +17,8 @@ def test_montar_retorna_servidor(monkeypatch):
 def test_doctor_subcomando_propaga_exit_code(monkeypatch):
     chamado = {}
 
-    def fake_doctor(env_file, yaml_file, modo_cor):
-        chamado["args"] = (env_file, yaml_file, modo_cor)
+    def fake_doctor(env_file, yaml_file, modo_cor, dialeto_override):
+        chamado["args"] = (env_file, yaml_file, modo_cor, dialeto_override)
         return 3
 
     monkeypatch.setattr("db_mcp.doctor.executar_doctor", fake_doctor)
@@ -26,7 +26,24 @@ def test_doctor_subcomando_propaga_exit_code(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         cli.main()
     assert exc.value.code == 3
-    assert chamado["args"] == (".env", "config.yaml", "auto")
+    assert chamado["args"] == (".env", "config.yaml", "auto", None)
+
+
+def test_flag_dialect_alcanca_o_doctor(monkeypatch):
+    """Regressão do gotcha `# FASE 1:`: o doctor carrega o Settings sozinho, então o
+    --dialect precisa ser propagado. Sem isso a flag MENTIA — rodava as 6 checagens
+    contra o dialeto da config e dizia que estava tudo bem."""
+    chamado = {}
+
+    def fake_doctor(env_file, yaml_file, modo_cor, dialeto_override):
+        chamado["dialeto"] = dialeto_override
+        return 0
+
+    monkeypatch.setattr("db_mcp.doctor.executar_doctor", fake_doctor)
+    monkeypatch.setattr(sys, "argv", ["db-mcp", "--dialect", "mysql", "doctor"])
+    with pytest.raises(SystemExit):
+        cli.main()
+    assert chamado["dialeto"] == "mysql"
 
 
 def test_flag_dialect_sobrescreve_a_config(monkeypatch):

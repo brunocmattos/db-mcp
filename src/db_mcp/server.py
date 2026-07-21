@@ -174,6 +174,9 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
 
     # Introspecção: SQL fixo do dialeto (information_schema), roda auditada pelo Nucleo
     # SEM validar (o `%s` não parseia em todo dialeto) — o identificador vai por params.
+    # `schema=None` (não "public") é o default: quem sabe o schema padrão é o DIALETO
+    # (no MySQL é o database configurado, não uma constante). Com "public" cravado aqui,
+    # toda chamada sem argumento seria recusada no MySQL.
     @mcp.tool
     def listar_schemas() -> list[dict[str, Any]]:
         """Lista os schemas do banco."""
@@ -183,7 +186,7 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
         )
 
     @mcp.tool
-    def listar_tabelas(schema: str = "public") -> list[dict[str, Any]]:
+    def listar_tabelas(schema: str | None = None) -> list[dict[str, Any]]:
         """Lista as tabelas de um schema."""
         return cast(
             "list[dict[str, Any]]",
@@ -191,7 +194,7 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
         )
 
     @mcp.tool
-    def listar_views(schema: str = "public") -> list[dict[str, Any]]:
+    def listar_views(schema: str | None = None) -> list[dict[str, Any]]:
         """Lista as views de um schema."""
         return cast(
             "list[dict[str, Any]]",
@@ -199,7 +202,7 @@ def construir_servidor(s: Settings, conectar: bool = True) -> FastMCP:
         )
 
     @mcp.tool
-    def descrever_tabela(tabela: str, schema: str = "public") -> list[dict[str, Any]]:
+    def descrever_tabela(tabela: str, schema: str | None = None) -> list[dict[str, Any]]:
         """Colunas e tipos de uma tabela."""
         return cast(
             "list[dict[str, Any]]",

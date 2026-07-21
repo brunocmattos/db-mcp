@@ -125,10 +125,16 @@ def test_checar_tcp_pula_sem_config():
 
 
 def test_checar_config_dialeto_sem_implementacao(monkeypatch):
-    # O Literal do config ACEITA "mysql", mas o _REGISTRO ainda não o resolve (Fase 1 T5).
+    # O Literal do config ACEITA "sqlserver", mas o _REGISTRO só o resolverá na Fase 2.
     # Sem essa checagem o erro estouraria cru na próxima checagem, sem remediação.
+    # (Era "mysql" até a T5 da Fase 1 — o dialeto passou a existir e o teste acusou.)
     _limpar_pg(monkeypatch)
-    for k, v in {"DB_HOST": "h", "DB_DBNAME": "d", "DB_PASSWORD": "p", "DIALETO": "mysql"}.items():
+    for k, v in {
+        "DB_HOST": "h",
+        "DB_DBNAME": "d",
+        "DB_PASSWORD": "p",
+        "DIALETO": "sqlserver",
+    }.items():
         monkeypatch.setenv(k, v)
     ctx = Contexto(env_file=None, yaml_file="/nao/existe.yaml")
     r = checar_config(ctx)
