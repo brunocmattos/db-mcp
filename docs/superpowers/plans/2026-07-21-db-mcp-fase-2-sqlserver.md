@@ -583,18 +583,39 @@ class _ConexaoPorConsulta:
 
 e implemente os dois métodos que estavam `NotImplementedError`:
 
+> 🪤 **Dois detalhes medidos na execução, que este snippet não previa:**
+>
+> **(a) O stub do pymssql tipa `port` como `str`, não `int`** — as 3 sobrecargas de `connect`
+> em `_pymssql.pyi` declaram `port: str = ...`. Sem `str(...)`, o mypy recusa por nenhuma
+> sobrecarga bater. Não é supressão: é o tipo que a lib espera.
+>
+> **(b) 🔴 `timeout=0` no pymssql significa SEM TIMEOUT**, não "timeout mínimo" (medido no
+> docstring de `connect`). E `config.py:41` tem `statement_timeout_ms: int = 5000` **sem
+> validação de mínimo**. Logo, `STATEMENT_TIMEOUT_MS=500` — meio segundo, pedido razoável —
+> truncaria para `0` na divisão inteira e **desligaria o timeout em silêncio**: o mesmo padrão
+> de falha ABERTA da Fase 1, só que por aritmética em vez de reset de sessão. O `max(1, ...)`
+> não é arredondamento cosmético, é a proteção — e por isso ganhou regressão própria (Task 3b).
+
 ```python
     def _conectar(self, s: Settings) -> Any:
         return self._pymssql.connect(
             server=s.db_host,
-            port=s.db_port or self.porta_padrao,
+            # o stub do pymssql tipa `port` como str (medido: as 3 sobrecargas de
+            # `connect` em _pymssql.pyi declaram `port: str = ...`) — sem o str() o
+            # mypy recusa por nenhuma sobrecarga bater com int.
+            port=str(s.db_port or self.porta_padrao),
             database=s.db_dbname,
             user=s.db_user,
             password=s.db_password,
             autocommit=True,
             login_timeout=5,
             # timeout de query é client-side: não existe statement_timeout de servidor
-            # como no Postgres nem max_execution_time como no MySQL.
+            # como no Postgres nem max_execution_time como no MySQL. O max(1, ...) não é
+            # só arredondamento: no pymssql `timeout=0` significa SEM timeout (medido no
+            # docstring de `connect`), então statement_timeout_ms < 1000 truncado por
+            # divisão inteira viraria 0 e desligaria o timeout em silêncio — o mesmo
+            # padrão de falha ABERTA da Fase 1. Arredondar pra cima (timeout > pedido)
+            # é o preço aceitável pra nunca cair nesse 0.
             timeout=max(1, s.statement_timeout_ms // 1000),
         )
 
