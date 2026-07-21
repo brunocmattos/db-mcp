@@ -78,3 +78,25 @@ def test_loads_seguidos_nao_vazam_yaml(tmp_path, monkeypatch):
     s2 = Settings.load(env_file=None, yaml_file=str(y2))
 
     assert (s1.max_rows, s2.max_rows) == (11, 22)
+
+
+def test_versao_do_pacote_bate_com_o_pyproject():
+    """`__version__` e `[project].version` não podem divergir.
+
+    A versão é declarada em DOIS lugares (`src/db_mcp/__init__.py` e `pyproject.toml`) e
+    nada as mantinha em sincronia: medido em 2026-07-21, o bump da Fase 2 subiu o
+    pyproject para 0.5.0 e deixou o `__version__` em 0.4.0 — o pacote reportando uma
+    versão que não era a dele, sem nenhum teste acusar. Falha silenciosa e barata de
+    evitar; é o que este teste faz.
+    """
+    import tomllib
+    from pathlib import Path
+
+    import db_mcp
+
+    raiz = Path(__file__).resolve().parent.parent
+    pyproject = tomllib.loads((raiz / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert db_mcp.__version__ == pyproject["project"]["version"], (
+        f"__version__={db_mcp.__version__!r} != pyproject={pyproject['project']['version']!r}"
+    )
