@@ -16,12 +16,23 @@ if TYPE_CHECKING:
 # de fora) e barraria nome de usuário que por acaso comece com xp_.
 FUNCS_PROIBIDAS_SQLSERVER = frozenset(
     {
-        # saem do banco/instância — o vetor mais grave do SQL Server. MEDIDO: chegam
-        # como exp.Anonymous e passam a checagem de raiz; só a blocklist os pega.
+        # saem do banco/instância via loopback — o vetor mais grave do SQL Server.
+        # MEDIDO: chegam como exp.Anonymous e passam a checagem de raiz Select; aqui
+        # é a blocklist quem de fato pega (openrowset na forma padrão de 3 argumentos
+        # tem teste dedicado provando isso — as outras variações, com credencial via
+        # ';' ou BULK, morrem só de ParseError, ver test_recusados_hoje_apenas_por_parseerror).
         "openquery",
         "opendatasource",
         "openrowset",
-        # execução de comando no SO e leitura de disco/registro
+        # 🛡️ SOBRA-DEFESA, não vetor real: xp_* são stored procedures ESTENDIDAS, e o
+        # motor só as invoca via EXEC — nunca como função/rowset dentro de um SELECT.
+        # MEDIDO contra SQL Server 2022 real, como `sa` (sem depender de GRANT):
+        #   SELECT * FROM xp_cmdshell('dir')  -> Msg 208 Invalid object name
+        #   SELECT xp_cmdshell('dir')         -> Msg 195 not a recognized built-in
+        #                                         function name
+        # A forma de ataque real (`EXEC xp_cmdshell ...`) já morre na checagem de raiz
+        # (não é Select/SetOperation) — a blocklist nem chega a ser acionada. Mantidas
+        # enumeradas assim mesmo: sobra-defesa é barata, e errar pra menos não é.
         "xp_cmdshell",
         "xp_regread",
         "xp_regwrite",
@@ -29,9 +40,15 @@ FUNCS_PROIBIDAS_SQLSERVER = frozenset(
         "xp_fileexist",
         "xp_subdirs",
         "xp_msver",
-        # leem trilha de auditoria e trace do servidor
+        # leem trilha de auditoria, trace e log de transação do servidor. MEDIDO: com
+        # usuário restrito dão Msg 300 (fn_get_audit_file), Msg 8189 (fn_trace_gettable)
+        # e Msg 229 (fn_dblog/fn_dump_dblog) — mas todas parseiam como Anonymous e são
+        # chamáveis por SELECT puro, então aqui, como no grupo do loopback acima, é a
+        # blocklist quem realmente pega.
         "fn_get_audit_file",
         "fn_trace_gettable",
+        "fn_dblog",
+        "fn_dump_dblog",
         # enumera permissões — reconhecimento
         "fn_my_permissions",
     }
@@ -69,7 +86,7 @@ class DialetoSqlServer:
     # verdade.
 
     def probar_escrita(self, conn: Any) -> None:
-        raise NotImplementedError  # Task 3
+        raise NotImplementedError  # Task 4
 
     def erro_readonly(self, e: Exception) -> bool:
         raise NotImplementedError  # Task 4
@@ -87,7 +104,7 @@ class DialetoSqlServer:
         raise NotImplementedError  # Task 5
 
     def sql_probe_escrita(self) -> str:
-        raise NotImplementedError  # Task 5
+        raise NotImplementedError  # Task 4
 
     def sql_identidade(self) -> str:
         raise NotImplementedError  # Task 5

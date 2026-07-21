@@ -29,9 +29,20 @@ def _recusa(sql: str) -> None:
     [
         "SELECT * FROM OPENQUERY(srv, 'SELECT 1')",
         "SELECT * FROM OPENDATASOURCE('SQLNCLI','x').db.dbo.t",
+        # forma padrão de 3 argumentos: parseia normal, raiz Select, Anonymous
+        # openrowset — é a técnica clássica de escalonamento via loopback. As outras
+        # duas formas (credencial com ';' e BULK) só morrem de ParseError (ver
+        # test_recusados_hoje_apenas_por_parseerror); esta é quem prova que a
+        # blocklist de fato pega o openrowset, não só o acidente sintático.
+        "SELECT * FROM OPENROWSET('SQLNCLI', 'Server=x;Trusted_Connection=yes;', 'select 1')",
+        # xp_cmdshell aqui exercita o MECANISMO do validador (exp.Anonymous + nome),
+        # não uma superfície de ataque real: no motor de verdade essa sintaxe nem
+        # chega a existir (ver o comentário em dialetos/sqlserver.py sobre os xp_*).
         "SELECT * FROM xp_cmdshell('dir')",
         "SELECT * FROM fn_get_audit_file('x', NULL, NULL)",
         "SELECT * FROM fn_trace_gettable('x', 1)",
+        "SELECT * FROM fn_dblog(NULL, NULL)",
+        "SELECT * FROM fn_dump_dblog('x', 'y')",
     ],
 )
 def test_funcoes_perigosas_sao_recusadas_pela_blocklist(sql):
