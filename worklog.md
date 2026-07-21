@@ -1,5 +1,58 @@
 # Worklog — db-mcp
 
+## 2026-07-21 · Desenvolvimento — Fase 1 (MySQL) CONCLUÍDA: T3 a T10
+**O quê:** "continuar" — comecei pela T3/T4 e a sessão foi até o fim da fase.   ·
+**Objetivo:** o MCP falando com um segundo banco, verificado.
+
+**Pausa no meio, e ela mudou a sessão.** O Bruno parou e perguntou por que 5 sessões não tinham
+entregue nada. **Medi e ele estava certo:** 43 commits, `src/ +1.804` linhas contra `*.md +4.971`
+(2,7x mais doc que código), e o `_REGISTRO` ainda com uma entrada só. Zero capacidade nova em 5
+sessões. O erro: 1.591 linhas de plano da Fase 0 pra preparar um arquivo de 190 linhas.
+Eu propus **pular T5-T10** e ele corrigiu com razão — ele não queria pular nada necessário, queria
+saber se havia plano. O corte certo era na **meta-documentação** (plano novo, revisão de plano, doc
+sobre a revisão), não nas tasks. Executei as 6 tasks restantes inteiras, sem escrever documento
+sobre o trabalho até a T9 (que é entregável).
+
+**Feito — 8 commits, todos pushados:**
+- **T3 `ba9836e` + T4 `9ba6166`.** O `doctor.py` deixou de importar `psycopg`: conexão, probe de
+  escrita, porta padrão e SQL de identidade saem do contrato; `erros_readonly` (tupla) virou o
+  predicado `erro_readonly`. **Estendi a T3 com 2 membros que o plano esquecia** (aprovado):
+  `porta_padrao` (o `5432` estava cravado em 3 pontos do doctor) e `sql_identidade()` (o
+  `current_database()` é `database()` no MySQL). Sem eles a T7 teria que mexer no doctor de novo.
+- **T5+T7 `e3cc755` — o MySQL passa a existir.** `doctor --dialect mysql` 6/6.
+- **T6 `2b7b4f6`** — corpus de 49 casos + o bug do `Unread result found`.
+- **T8 `4bdc3a6`** — CI com os dois bancos.  ·  **T9 `db01e6b`** — a tabela honesta dos cadeados.
+- **T10 `d00a0bd`** — verificação final com os containers recriados do zero.
+
+**Medir antes de codar salvou o cadeado principal.** `pool_reset_session=True` **ZERA** o
+`SET SESSION TRANSACTION READ ONLY` no retorno ao pool (medido: mesmo `CONNECTION_ID`, `1 → 0`).
+Se eu tivesse presumido, as conexões voltariam **graváveis em silêncio** do 2º checkout em diante.
+Virou teste de regressão permanente.
+
+**5 defeitos que só existiram porque um 2º banco passou a existir** — nenhum plano teria pego:
+1. 🔴 **`Unread result found`**: fechar cursor com linhas por ler vaza a conexão do pool e mascara
+   o erro. O gatilho é o caminho NORMAL (`fetchmany` + `fetchone` da truncagem) — **toda query
+   truncada quebrava no MySQL**, e a 5ª esgotava o pool.
+2. **`--dialect` não chegava no `doctor`** — passaria a mentir em silêncio.
+3. **Tools defaultavam `schema="public"`** — no MySQL toda chamada sem argumento seria recusada.
+4. **O CI quebraria no mypy** (`uv sync --locked` não instala o extra) — medido antes de commitar.
+5. **Eu quebrei a suíte de quem não instala o extra** ao registrar o mysql (`ImportError`, não skip).
+
+**Dois erros meus que os testes pegaram, não eu:** copiei do Postgres o caso `"load_file"(...)`
+achando que testava "função citada não escapa da blocklist" — **no MySQL aspas duplas são STRING**,
+a citação é a crase; era um teste verde que não testava nada. E um andaime de teste com `object()`
+sem `.close()`.
+
+**Riscos / quem afeta:** ⚠️ **Nada em produção** (`no_ar: não`, zero usuários). ⚠️ **O `main` segue
+em `76b123d`** — repo **público**, e quem chega no GitHub vê só a Fase 0, não o MySQL. Decidir o
+merge é a próxima ação. ✅ Tudo pushado (`0/0`), working tree limpo, backup off-machine em dia.
+📌 Uma alegação do próprio `CLAUDE.md` era **falsa** e foi corrigida: a skill `setup-db-mcp` NÃO
+escreve chaves `pg_*` (ela parte do `.env.example`, que já usa `DB_*`).
+
+**Próximo:** decidir o **merge da `refactor/fase-1-mysql` pro `main`** (o repo é público e o main
+está desatualizado); depois planejar a **Fase 2 (SQL Server)** — que herda `tsql`≠`sqlserver`,
+`OPENQUERY`/`OPENROWSET`, `WAITFOR DELAY` e a ausência de reset de sessão.
+
 ## 2026-07-20 · Desenvolvimento — Revisão do plano da Fase 1 + T1 e T2 executadas
 **O quê:** "Vamos continuar" — o Bruno escolheu os **3 escopos**: revisar o plano da Fase 1, arrumar as
 divergências dos docs, e executar a T1.   ·   **Objetivo:** plano confiável, docs verdadeiros, e a

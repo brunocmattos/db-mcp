@@ -4,305 +4,179 @@ cliente: interno
 produto: —
 no_ar: não
 atividade: ativo
-stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "sqlglot"]
-ultima_atividade: 2026-07-20
-proxima_acao: "Fase 1: T1+T2 feitas e pushadas (branch refactor/fase-1-mysql) — seguir com T3/T4 (Postgres-prep) e depois T5 (mysql.py), que exige medir o driver antes"
+stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "mysql-connector", "sqlglot"]
+ultima_atividade: 2026-07-21
+proxima_acao: "Fase 1 (MySQL) CONCLUÍDA e verificada na branch refactor/fase-1-mysql (pushada). Decidir o merge pra main — o repo é público e o main ainda mostra só a Fase 0 — e depois planejar a Fase 2 (SQL Server)"
 repo: git+remote
-tags: [mcp, banco-de-dados, open-source, postgres]
+tags: [mcp, banco-de-dados, open-source, postgres, mysql]
 ---
 # db-mcp
 
 ## Estado atual
-**Fase 0 CONCLUÍDA e mergeada em `main`. Fase 1 (MySQL) EM EXECUÇÃO — plano revisado; T1 e T2
-feitas e verificadas (2026-07-20).**
-O trabalho da Fase 1 vive na branch **`refactor/fase-1-mysql`**, **pushada e em sincronia** em
-`7e11293` — T1 (`2e484a4`), T2 (`fa368b1`) e os docs, com backup off-machine. `main` e
-`refactor/fase-0-multi-dialeto` seguem em `76b123d` (pushados) — o **`main` público mostra a Fase 0 +
-o plano revisado**, não a WIP da Fase 1. Working tree limpo.
-As **12 tasks da Fase 0** estão feitas, mais as lacunas pós-fase.
-- ✅ **T1 — config neutro `db_*`** (`2e484a4`): `pg_* → db_*` na config e em TODOS os callers (config,
-  postgres, doctor, testes, `ci.yml`, docs, `.env.demo`/`.env.example`). `db_port: int | None`
-  (5432≠3306 — cada dialeto aplica a sua porta). `pyproject` ganhou o extra opcional
-  `mysql = mysql-connector-python>=9`; `uv.lock` atualizado.
-- ✅ **T2 — introspecção desce pro `Nucleo`** (`fa368b1`): as 4 tools delegam a `Nucleo.introspectar`,
-  que monta o SQL do novo `sql_introspecao` (do dialeto) **dentro da trilha auditada** e resolve o
-  schema default por `dialeto.schema_padrao`.
-- 🎯 **A revisão do plano achou um furo REAL (medido) — já corrigido na T2:** o `%s` **não parseia** no
-  dialeto `mysql` (vira `exp.Mod` → `ParseError`), então `validar()`/`injetar_limit()` **derrubariam
-  toda a introspecção** no MySQL. A T9 da Fase 0 manteve o validador ligado nessa rota porque *"o `%s`
-  parseia"* — verdade **só no Postgres**: era sorte, não garantia. Fix: `consultar` ganhou
-  `validar_sql: bool = True`; a introspecção chama com `False` (SQL fixo, identificador via `params`
-  = zero injeção, `fetchmany` limita as linhas — o `LIMIT` ali era redundante).
-- 🐛 **Bug que SÓ a suíte com banco pegou:** `params=()` (schemas, sem binds) fazia o psycopg interpolar
-  o `LIKE 'pg_%'` e estourar (`only '%s' … allowed as placeholders`). Vazio → `None` (sem binds = sem
-  interpolação); regressão guardada em teste. **A suíte sem banco passava** — foi o e2e contra o
-  Postgres vivo que pegou. Lição: verificar as duas.
+**Fase 1 (MySQL) CONCLUÍDA e verificada em 2026-07-21.** O produto fala com **dois bancos**:
+`db-mcp --dialect {postgres,mysql} doctor` fecha **6/6** nos dois. Versão **0.4.0**.
 
-- 📄 **[Spec do design multi-dialeto](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)**
-  (aprovado) · **[plano da Fase 0](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md)**
-  (feito) · **[plano da Fase 1 — MySQL](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md)**
-  (escrito 2026-07-20, grounded em 21 achados medidos, **revisado e corrigido em 2026-07-20** — a
-  revisão mediu o Achado #1 do `%s` e patchou a T2). Fase 2 (SQL Server) ganha plano próprio quando a 1 fechar.
-- ✅ **O núcleo é dialeto-agnóstico:** `db.py` **não importa `psycopg`** — pool, cursor-dict, tradução
-  de erro do driver **e o probe de escrita do doctor** (T10) vêm do contrato `Dialeto`. Os **3 defeitos
-  do spec** (5.1 policy, 5.2 amostra, 5.3 introspecção) estão corrigidos, cada um com teste de regressão.
-- 🧪 **Testes:** 135 passed / 24 skipped sem banco · **159 passed / zero skipped** com o demo Docker ·
-  `doctor` **6/6** · ruff/format/mypy limpos. (Era 130/24 e 154/0 no fim da Fase 0; a T2 somou 5.) A Fase 0 não mudou
-  comportamento no Postgres — a suíte existente foi a rede de segurança. A **fiação e2e** (T11,
-  `tests/test_ataques_e2e.py`) prova que os guardrails estão *plugados*, não só corretos isolados.
-- 🎯 **A T9 corrigiu o plano de novo (medido):** ele mandava DESLIGAR o validador quando
-  `params is not None`, supondo que `%s` não fosse SQL parseável. Medido no sqlglot 30.12: `%s`
-  parseia, passa `validar()` e `injetar_limit()` — o **cadeado nº 3 fica LIGADO em todo caminho**.
-  A introspecção agora manda o nome por query parameter (`%s`), matando a classe de injeção; a regex
-  `_IDENT`/`_validar_ident` saiu.
-- ⚠️ **A Task 2 (rename) nunca passou pela revisão formal** — de pé por aprovação do Bruno +
-  verificação manual. Revisão retroativa segue no Backlog.
-- 📖 **Spec, plano, `CLAUDE.md` e `worklog.md` são públicos, por decisão (2026-07-16).** Nada aqui
-  tem segredo — os segredos moram em `.env`/`config.yaml`/`deployments/`, todos git-ignored.
+O trabalho vive na branch **`refactor/fase-1-mysql`**, pushada e em sincronia em `d00a0bd`.
+⚠️ **`main` segue em `76b123d`** (só a Fase 0 + o plano) — o repo é **público**, então o
+`main` ainda não mostra o MySQL. **Decidir o merge é a próxima ação.**
 
-**Próxima ação:** seguir a Fase 1 na branch `refactor/fase-1-mysql` — **T3** (doctor dialeto-aware) e
-**T4** (`erros_readonly` → predicado), que são Postgres-prep rápidas. Depois a **T5** (`dialetos/mysql.py`),
-que **exige MEDIR o driver antes de codar** (`pool_reset_session` de fato zera o `SET SESSION TRANSACTION
-READ ONLY`? é o cadeado que *falha aberta*).
-O [plano da Fase 1](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md) foi **revisado e corrigido**
-(2026-07-20 — Achado #1 do `%s`, T2 patchada; + notas de `get_lock`, autocommit×rollback no probe, e
-"medir o driver antes").
-As 4 armadilhas medidas que o plano ataca: read-only *per-checkout* (mysql-connector sem callback,
-falha aberta), `schema==database` (§6), DDL com commit implícito no probe do doctor, e `--dialect`
-que não alcança o `doctor`.
-✅ **As lacunas pós-Fase-0 foram fechadas (2026-07-20):** o `amostra` recusa **com** auditoria
-(`Nucleo.amostrar`, `bc2a20b`), o **teste de invariante por dialeto** entrou (`cc20676`), e uma
-**caça adversarial** confirmou zero recusas alcançáveis sem auditoria (o único achado, gotcha nº 1,
-é inalcançável e guardado no CI). A dívida `conn: Any` também caiu (`1b59fa2`).
-🔀 **Episódio de duas sessões simultâneas (2026-07-20):** o Bruno rodou uma 2ª sessão no mesmo
-working tree; o commit `1b59fa2` (conn: Any) veio dela, interleaved com os meus. Verificado depois:
-**nada quebrou** — histórico linear (zero reset/rebase), sem overlap de arquivos, mypy/suíte/doctor
-verdes no estado combinado. Lição: 2 sessões no mesmo diretório = 1 working tree; conferir o reflog
-e rodar a suíte antes de confiar.
+Medido com os containers **recriados do zero** (`down -v` antes):
+
+| | sem banco | Postgres | MySQL |
+|---|---|---|---|
+| suíte (229 testes) | 191 ✅ / 38 ⏭️ | 215 ✅ / 14 ⏭️ | 216 ✅ / 13 ⏭️ |
+| `doctor` | — | **6/6** | **6/6** |
+| recusa de escrita | — | `25006 ReadOnlySqlTransaction` | `42000` / `1142` |
+
+`ruff` · `ruff format` · `mypy src` limpos. **`base.py`, `db.py`, `server.py` e `doctor.py` não
+importam `psycopg` nem `mysql`** — o núcleo é dialeto-agnóstico de fato, não de intenção.
+Os 13/14 skips são **auditados** (`-rs`): é o corpus de ataque do *outro* dialeto se pulando,
+e deve mesmo. A união dos dois modos cobre os 229.
+
+**A aposta da Fase 0 se pagou:** o dialeto novo custou **um arquivo** (`dialetos/mysql.py`) e
+**uma linha** no `_REGISTRO`. Nenhum arquivo do núcleo foi tocado para o MySQL existir.
 
 ## O que é
 Servidor MCP somente-leitura para bancos SQL. Dá a agentes de IA (Claude Desktop, Claude Code,
 automações) acesso de introspecção e `SELECT`, sem escrever, alterar schema ou derrubar o banco.
 
-Era `pg-readonly-mcp` (só PostgreSQL). Está virando **multi-dialeto**: um repo, um pacote, dialetos
-como módulos (`postgres` hoje; `mysql` e `sqlserver` nas Fases 1 e 2). O nome perdeu o `readonly`
-porque escrita configurável é ambição futura — e `readonly` no nome viraria mentira.
-
-O código não conhece nenhum banco específico: você aponta o MCP pro seu banco preenchendo a config.
-Nenhum host, senha ou nome de tabela real fica no repositório.
+Um repo, um pacote, dialetos como módulos: **`postgres` e `mysql` prontos**, `sqlserver` na Fase 2.
+O código não conhece nenhum banco específico — você aponta pelo config. Nenhum host, senha ou nome
+de tabela real fica no repositório.
 
 ## Stack & como rodar
 Python 3.11+ com [`uv`](https://docs.astral.sh/uv/). Não está no PyPI — instala-se clonando.
 
 ```bash
-uv sync                                  # instala tudo
-docker compose up -d                     # Postgres de demo semeado na porta 5433
-uv run db-mcp --env .env.demo doctor     # deve fechar 6/6 verde
-uv run db-mcp --env .env.demo            # sobe o servidor (stdio)
-docker compose down -v                   # derruba e apaga
+uv sync --extra mysql                          # o driver do MySQL é extra OPCIONAL
+docker compose up -d                           # Postgres de demo na 5433
+docker compose --profile mysql up -d           # MySQL de demo na 3307
+uv run db-mcp --env .env.demo doctor           # 6/6
+uv run db-mcp --env .env.demo-mysql doctor     # 6/6
+docker compose --profile mysql down -v         # derruba e apaga tudo
 ```
 
-**Testes:**
+**Testes** — a suíte é a mesma; o banco apontado decide o que roda:
 ```bash
-uv run pytest -q                         # 126 passed, 24 skipped (integração se auto-pula sem banco)
-# com banco (destrava os de integração → 150 passed, zero skipped):
-DB_HOST=localhost DB_PORT=5433 DB_DBNAME=demo DB_USER=mcp_ro DB_PASSWORD=mcp_ro_demo uv run pytest -q
+uv run pytest -q                                    # 191/38 (integração se auto-pula)
+DB_HOST=localhost DB_PORT=5433 DB_DBNAME=demo DB_USER=mcp_ro DB_PASSWORD=mcp_ro_demo \
+  uv run pytest -q                                  # 215/14
+DIALETO=mysql DB_HOST=127.0.0.1 DB_PORT=3307 DB_DBNAME=demo DB_USER=mcp_ro \
+  DB_PASSWORD=mcp_ro_demo uv run pytest -q          # 216/13
 uv run ruff check . && uv run ruff format --check . && uv run mypy src
 ```
 
-O gate dos testes de integração é `.env` existir **ou** `DB_HOST` no ambiente
-(`tests/test_e2e_integration.py:10`) — sem isso eles se pulam sozinhos, e é normal.
+⚠️ **Rode as DUAS suítes.** Vários bugs desta fase passavam sem banco e só apareceram contra o
+banco vivo. O gate da integração é `.env` existir **ou** `DB_HOST` no ambiente.
 
 ## Estrutura
 ```
 src/db_mcp/
-├── server.py          casca MCP (FastMCP) — dialeto-agnóstica
+├── server.py          casca MCP (FastMCP) + Nucleo (toda lógica auditável)
 ├── db.py              fachada fina; delega ao dialeto
 ├── config.py          pydantic-settings (.env + config.yaml)
-├── doctor.py          as 6 checagens de saúde
-├── cli.py             `db-mcp` + `--dialect`
+├── doctor.py          as 6 checagens — não importa driver nenhum
+├── cli.py             `db-mcp` + `--dialect` (chega no doctor desde a Fase 1)
 ├── guardrails/        sql.py (validador) · policy.py (allowlist + LIMIT) · ratelimit.py
-└── dialetos/          base.py (o Protocol + Perfil) · postgres.py  ← MySQL/SQL Server entram aqui
+└── dialetos/          base.py (Protocol) · postgres.py · mysql.py   ← sqlserver entra aqui
 ```
 
-**Ordem de leitura pra retomar:** `docs/superpowers/specs/2026-07-16-…-design.md` (o porquê de tudo,
-incl. a tabela honesta dos cadeados) → `docs/superpowers/plans/2026-07-16-…-fase-0-….md` (as 12 tasks).
-Manual do produto em `docs/` (`DESIGN.md`, `01-instalacao.md`, `02-preparar-o-banco.md`,
-`03-arquitetura.md`, `04-troubleshooting.md`, `00-para-leigos.md`).
+**Ordem de leitura pra retomar:** [spec do design](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)
+→ [plano da Fase 1](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md) (feito, com os
+resultados medidos no fim). Manual do produto em `docs/`.
 
 ## Ambiente & acessos
-- **Nenhum deployment real ainda.** O único banco em uso é o container de demonstração.
-- **Credenciais do demo são FAKE e públicas** (`mcp_ro` / `mcp_ro_demo` @ `localhost:5433/demo`,
-  em `.env.demo` e `demo/init/03-mcp-ro.sql`) — não são segredo, são parte do exemplo.
-- **Segredos reais** (quando houver deployment) vão em `.env` / `config.yaml`, ambos **git-ignored**,
-  e cada ambiente é registrado em `deployments/<ambiente>.md` (git-ignored). Ponteiro para o cofre
-  `CHAVES/` da raiz — **nunca inline aqui**.
-- ⚠️ **A ferramenta Read do Claude é bloqueada por permissão em arquivos `.env*`** — para descobrir
-  os parâmetros do demo, ler `docker-compose.yml` e `demo/init/03-mcp-ro.sql`.
+- **Nenhum deployment real.** Só os dois containers de demonstração.
+- **Credenciais dos demos são FAKE e públicas** — `mcp_ro`/`mcp_ro_demo` em `localhost:5433`
+  (Postgres) e `127.0.0.1:3307` (MySQL). Estão em `.env.demo`, `.env.demo-mysql` e nos
+  `demo/init*/03-mcp-ro.sql`. Não são segredo, são parte do exemplo.
+- **Segredos reais** vão em `.env` / `config.yaml`, ambos git-ignored; cada ambiente em
+  `deployments/<ambiente>.md` (git-ignored). Ponteiro pro cofre `CHAVES/` — nunca inline aqui.
+- ⚠️ **A ferramenta Read do Claude é bloqueada em arquivos `.env*`** — para descobrir os
+  parâmetros dos demos, ler `docker-compose.yml` e os `demo/init*/03-mcp-ro.sql`.
 
 ## Decisões & gotchas
 
 ### Decisões travadas (2026-07-16) — detalhe no [spec §1](docs/superpowers/specs/2026-07-16-db-mcp-multi-dialeto-design.md)
-**Um repo**, dialetos como módulos (3 repos fariam a lista de funções perigosas **divergir** —
-corrige-se um bypass no Postgres e esquece nos outros) · **pool nativo por dialeto** (o `DBUtils` não
-roda `DISCARD ALL`, que aqui é segurança; o SQLAlchemy é dependência grande demais num produto cuja
-tese é superfície pequena) · **pymssql** (o pyodbc exige `msodbcsql18` no SO e quebra o "clona e
-roda") · **mysql-connector** (tem pool **e** `RESET CONNECTION`; o PyMySQL não tem nenhum dos dois) ·
-**só leitura neste spec** — escrita ganha spec próprio.
+**Um repo**, dialetos como módulos (3 repos fariam a lista de funções perigosas **divergir**) ·
+**pool nativo por dialeto** · **pymssql** (o pyodbc exige `msodbcsql18` no SO) ·
+**mysql-connector** (tem pool **e** `RESET CONNECTION`) · **só leitura** — escrita ganha spec próprio.
 
 ### O princípio da escrita futura
-**O cadeado nº 1 (o usuário do banco) é a autoridade. A config da aplicação só pode SUBTRAIR do que
-ele já pode fazer, nunca somar.** `MODE=write` num `mcp_ro` continua não escrevendo — o banco recusa.
-Escrita real exigirá um **usuário de banco diferente com GRANT**, que é passo de deployment, não
-linha de YAML. A costura já está no lugar (`validar(sql, dialeto, perfil)`, `Perfil` com um valor só).
+**O cadeado nº 1 (o usuário do banco) é a autoridade. A config da aplicação só pode SUBTRAIR do
+que ele já pode fazer, nunca somar.** `MODE=write` num `mcp_ro` continua não escrevendo. Escrita
+real exigirá usuário de banco diferente com GRANT — passo de deployment, não linha de YAML.
 
-### 🚨 Os cadeados NÃO portam igual entre bancos
-| | PostgreSQL | MySQL | SQL Server |
+### 🚨 Os cadeados NÃO portam igual entre bancos (Postgres e MySQL, MEDIDO)
+| | PostgreSQL | MySQL | SQL Server (Fase 2) |
 |---|---|---|---|
-| Cadeado nº 1 | `default_transaction_read_only` **no role** + GRANT | `SET SESSION TRANSACTION READ ONLY` + GRANT | **só GRANT/DENY** |
+| Cadeado nº 1 | `default_transaction_read_only` **no role** + GRANT | **só GRANT** + `SET SESSION TRANSACTION READ ONLY` por conexão | **só GRANT/DENY** |
+| Quem garante o read-only | o **servidor** | a **aplicação** (reaplica a cada checkout) | — |
 | Reset de sessão | `DISCARD ALL` | `RESET CONNECTION` | **não existe** |
-| Força real | cinto **e** suspensório | cinto fraco + suspensório | **só suspensório** |
+| Força real | cinto **e** suspensório | suspensório forte + cinto do app | **só suspensório** |
 
-O README afirma *"o próprio Postgres recusa a escrita"* — **essa frase fica FALSA no SQL Server.**
-Corrigir os docs é entregável da Fase 2, não nota de rodapé. **Não escrever essa tabela no README
-antes de o dialeto existir** — documentar capacidade inexistente é o oposto da honestidade.
+Está documentado no README, `docs/02-preparar-o-banco.md` e `00-para-leigos.md`, **com a
+consequência prática escrita como instrução**: no MySQL o `GRANT SELECT` restrito é a proteção
+principal, e **nunca conceder `FILE`** (habilita `INTO OUTFILE`/`load_file`).
 
-### Gotchas
-- **Repo PÚBLICO** — o único do portfólio (os outros são privados). Pense antes de commitar.
-- **O núcleo já era dialeto-agnóstico** (medido no sqlglot 30.12, não presumido): os nós
-  (`Insert`/`Update`/`Delete`/`Create`/`Drop`) têm nome **idêntico** nos 3 dialetos, `exp.Anonymous`
-  pega função perigosa nos 3, e `LIMIT` vira `TOP` sozinho no tsql. **Muda a LISTA, não o mecanismo.**
-- **`--dialect` não alcança o subcomando `doctor`** (ele carrega o `Settings` sozinho). Inofensivo
-  enquanto só `postgres` resolve; na Fase 1 a flag passa a **mentir em silêncio**. Marcador
-  `# FASE 1:` no `cli.py`.
-- **`INTO OUTFILE` (MySQL) e `WAITFOR DELAY` (T-SQL) só são barrados por `ParseError`** — falham
-  fechado, mas **por acidente**. Um upgrade do sqlglot que passe a parseá-los abre o buraco em
-  silêncio → teste de regressão nasce junto do dialeto (Fases 1 e 2).
-- **`OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE` passam pelo validador** com raiz `Select` — precisam
-  entrar na lista do T-SQL (Fase 2).
-- 🪤 **`"sqlserver"` NÃO é nome de dialeto do sqlglot — lá se escreve `tsql`** (medido: `postgres` e
-  `mysql` o sqlglot aceita, `sqlserver` dá `ValueError: Unknown dialect`). E `"sqlserver"` é
-  exatamente a string que já está no `Literal` do `config.py:33`. O nome do produto e o do sqlglot
-  coincidem em 2 dos 3 dialetos e quebram **só** no terceiro, então quem copiar o padrão do
-  `postgres.py` (onde `nome == sqlglot_dialeto`, por coincidência) na Fase 2 escreve
-  `sqlglot_dialeto = "sqlserver"` e leva `ValueError` em toda query. O `Dialeto` tipa o campo como
-  `str` puro → o mypy não pega. Pior: o `ValueError` escapa do `except SqlglotError` do `validar`
-  (ele não é da família do sqlglot) **e** do `except McpDbError` do `server.py` → sai **sem
-  auditoria**. Falha **fechada** (a query morre, nada vaza) e é inalcançável hoje. ✅ **Agora guardado
-  no CI** pelo `test_invariante_todo_dialeto` (`cc20676`), que faz round-trip do `sqlglot_dialeto` e
-  falha se um dialeto novo cravar `"sqlserver"` — o `ValueError` morre no CI, não numa query. (Caça
-  adversarial de 2026-07-20 reconfirmou o mecanismo aberto estruturalmente mas inalcançável; decidido
-  **não** embrulhar `ValueError` no `validar` — seria rotular erro de config como recusa do usuário.)
-- 🪤 **`TokenError` NÃO é subclasse de `ParseError` — são irmãs sob `SqlglotError`** (medido). Quando
-  o **tokenizer** morre antes do parser (aspa nunca fechada), o sqlglot levanta `TokenError`. Um
-  `except ParseError` — que era o código até 2026-07-17 e o que o **plano ainda prescreve na T8** —
-  a deixa vazar crua: não vira `SqlInvalido`, escapa do `except McpDbError` do `server.py`, e a
-  recusa sai **sem rastro na auditoria**. Falhava fechado, mas sem trilha. Corrigido no `74aba49`
-  (`except SqlglotError` no `sql.py` e no `sql_amostra`). **Qualquer `except ParseError` novo
-  reabre isto** — a família inteira é `SqlglotError`.
-- ⚠️ **`funcs_proibidas` vazia falharia ABERTA — é o único ponto da costura nova com essa assimetria.**
-  Um dialeto stub na Fase 1 com a lista por preencher liberaria `SELECT load_file('/etc/passwd')`.
-  Contrapeso verificado: com `funcs_proibidas` vazia o `DELETE FROM t` **continua barrado** pelo
-  `TAGS_PROIBIDAS` — ou seja, manter as tags no módulo é carga estrutural, não estética: dialeto mal
-  escrito não destranca escrita. ✅ **Agora guardado no CI** pelo `test_invariante_todo_dialeto`
-  (`cc20676`), que exige `funcs_proibidas` não-vazia pra todo dialeto de `DIALETOS_IMPLEMENTADOS`.
-- **A allowlist é defesa em profundidade, não o limite último.** O isolamento forte tem que estar no
-  banco (GRANT só nas tabelas certas). Ver `docs/DESIGN.md §5` — ele é honesto sobre o que a análise
-  de SQL **não** cobre.
+### 🔴 O único cadeado que falha ABERTA (medido, mysql-connector 9.7 / MySQL 8.4)
+`pool_reset_session=True` **ZERA** o `SET SESSION TRANSACTION READ ONLY` no retorno ao pool
+(mesmo `CONNECTION_ID`, `1 → 0`) e o `max_execution_time` junto. Aplicá-los uma vez na criação do
+pool deixaria as conexões **graváveis e sem timeout do 2º checkout em diante, em silêncio**.
+Por isso `_PoolMySQL.connection()` reaplica **a cada checkout** — e
+`test_mysql_reaplica_read_only_a_cada_checkout` existe para impedir que alguém "simplifique" isso.
+
+### Gotchas vivos
+- **Repo PÚBLICO** — o único do portfólio. Pense antes de commitar.
+- 🪤 **`"sqlserver"` NÃO é nome de dialeto do sqlglot — lá se escreve `tsql`** (medido), e
+  `"sqlserver"` é exatamente a string já no `Literal` do `config.py`. Quem copiar o padrão do
+  `postgres.py`/`mysql.py` (onde `nome == sqlglot_dialeto` por coincidência) leva `ValueError` em
+  toda query, **sem auditoria**. ✅ Guardado no CI pelo `test_invariante_todo_dialeto`.
+- ⚠️ **`funcs_proibidas` vazia falharia ABERTA** — um dialeto stub liberaria `load_file`.
+  ✅ Guardado pelo mesmo teste de invariante. Contrapeso: as `TAGS_PROIBIDAS` seguem barrando
+  escrita mesmo com a lista vazia.
+- 🪤 **`TokenError` NÃO é subclasse de `ParseError`** — são irmãs sob `SqlglotError` (medido).
+  **Qualquer `except ParseError` novo reabre** a recusa-sem-auditoria corrigida no `74aba49`.
+- **`INTO OUTFILE`/`DUMPFILE` só são barrados por `ParseError`** — falham fechado **por acidente**.
+  ✅ Regressão em `test_sql_mysql.py` que exige **recusa** (`McpDbError`), não o mecanismo: se o
+  sqlglot passar a parseá-los, o teste avisa em vez de o buraco abrir calado.
+- 🪤 **No MySQL, aspas duplas são STRING literal — a citação é a CRASE** (medido). Copiar do
+  corpus do Postgres o caso `"load_file"(...)` testa uma coisa que não existe: ele morre no parser
+  (`sql_invalido`), enquanto `` `load_file`(...) `` é que chega na blocklist (`somente_leitura`).
+- 🔴 **mysql-connector: fechar cursor com linhas por ler estoura `Unread result found`**, e o
+  `close()` seguinte falha mascarando o erro **e vazando a conexão do pool**. O caminho normal de
+  truncagem (`fetchmany(n)` + `fetchone()`) dispara isso. Fix: `conn.consume_results()` antes do
+  `cur.close()` (o psycopg descarta sozinho). **Toda query truncada quebrava antes disso.**
+- **O CI DEVE usar `--all-extras`** — sem o driver, o mypy não resolve o import **e** o
+  `test_invariante_todo_dialeto[mysql]` se pula, silenciando o gate onde ele mais importa.
+- **A allowlist é defesa em profundidade, não o limite último.** O isolamento forte está no banco.
+  Ver `docs/DESIGN.md §5`.
 
 ## Backlog
-- [x] **Fase 0 · T1-T5 (2026-07-16):** pasta/remote → pacote `db_mcp` + comando `db-mcp` → config
-  `dialeto` + `--dialect` → contrato `Dialeto` + `dialetos/postgres.py` → `db.py` delega.
-  Commits `52bd464..8864f69`. **127 passed / zero skipped** contra o Postgres vivo.
-- [x] **Fase 0 · T6 (2026-07-16):** `validar(sql, dialeto, perfil)`; `FUNCS_PROIBIDAS` saiu do módulo
-  e vem do dialeto (`TAGS_PROIBIDAS` ficou — os nós são idênticos nos 3); `test_sql.py` parametrizado.
-  Commit `7c39ada`. **45 testes em `test_sql.py` antes e depois** (nenhum ataque deixou de ser
-  barrado) · 118/9 sem banco · revisões de spec e de qualidade passaram, zero Critical.
-- [x] **Fase 0 · T7 (2026-07-17):** `policy.py` lê **e** emite no dialeto alvo. Commit `646ba6b`.
-  **Desvio do plano, aprovado:** `tabelas_referenciadas`/`checar_allowlist` ficaram com o dialeto
-  **obrigatório**, sem o default `"postgres"` que o plano previa — são caminho de segurança, e com
-  default um caller esquecido passa calado. Dividendo imediato: o mypy acusou na hora os 2 callers
-  do `server.py`. **Correção ao doc:** o defeito **não** era `TOP 9999` → `LIMIT 1000` (isso dava
-  `ParseError`, falha fechada); era a query T-SQL **sem limite**, que parseia nos dois dialetos e
-  saía com `LIMIT 100` grudado. O teste novo mira o caso real.
-- [x] **Fase 0 · T8 (2026-07-17):** `amostra` usa `sql_amostra` do dialeto. Commit `67b6485`. O
-  `_validar_qualificado` (regex no `server.py`) **saiu** — ficou sem caller, e o parse
-  `into=exp.Table` do dialeto é mais estrito. Corpus de ataques re-apontado pro `sql_amostra`:
-  **de 4 para 8 casos**, nenhum perdido. Fiação verificada no servidor real (o SQL auditado saiu
-  `SELECT * FROM "clientes" LIMIT 2`, com aspas = assinatura do dialeto). **Mudança de
-  comportamento registrada em teste:** nome de 3 partes agora passa o check (a regex barrava) e
-  morre no banco — inócuo no Postgres, **decisão de segurança na Fase 2** (o SQL Server resolve
-  3 partes cross-database e o `tabelas_referenciadas` ignora o catalog).
-- [x] **Fase 0 · T9 (2026-07-20) — o último dos 3 defeitos reais:** introspecção por **query
-  parameters**. Commit `bc8f901`. A regex `_IDENT`/`_validar_ident` saiu; `listar_tabelas`/
-  `listar_views`/`descrever_tabela` mandam o nome por `%s`+`params`, matando a classe de injeção.
-  **O plano estava errado (medido):** mandava **desligar o validador** quando `params is not None`,
-  supondo `%s` não-parseável — mas `%s` parseia no sqlglot 30.12, passa `validar()` e `injetar_limit()`,
-  então o cadeado nº 3 ficou **ligado em todo caminho**. −6 testes (7 da regex saíram, +1 de parâmetro).
-  Prova e2e: payload de `DROP` vai por `params`, auditoria registra `%s`; `2fa_tokens` descreve sem erro.
-- [x] 🐛 **Recusa no `amostra` agora vira auditoria (2026-07-20, `bc2a20b`).** A lógica desceu pro
-  `Nucleo.amostrar`: o build `sql_amostra` roda DENTRO da trilha auditada, então nome inválido audita
-  `veredito=sql_invalido` (com o nome tentado na trilha, valor forense) e re-levanta; a tool traduz
-  pra `{"erro": ...}`. Provado e2e: 2/2 sondagens auditam (antes, 1/2). +3 testes unitários.
-- [x] 🧪 **Testabilidade das tools — resolvido pra onde importa (2026-07-20, `bc2a20b`).** A única
-  tool com lógica fora do `Nucleo` era o `amostra`; ela desceu pro `Nucleo.amostrar` (testável sem
-  banco — 3 testes novos). Os wrappers `@mcp.tool` ainda não têm ponto de injeção no
-  `construir_servidor`, mas isso virou **cosmético**: toda a lógica auditável/testável mora no
-  `Nucleo`, e a fiação tool→Nucleo é coberta pelo e2e (`test_e2e_integration.py`).
-  ✅ **Fechado de vez na T2 da Fase 1 (2026-07-20, `fa368b1`):** as 4 tools de introspecção também
-  desceram pro `Nucleo.introspectar` — nenhuma tool monta SQL inline agora, e +5 testes unitários
-  cobrem a introspecção sem banco.
-- [x] **Teste de invariante por dialeto (2026-07-20, `cc20676`).** `test_invariante_todo_dialeto`
-  parametrizado por `DIALETOS_IMPLEMENTADOS` (derivado do `_REGISTRO`, a nova **fonte única** em
-  `dialetos/__init__.py`): (a) `sqlglot_dialeto` faz round-trip real (pega `"sqlserver"` no lugar de
-  `"tsql"` → `ValueError: Unknown dialect`) e (b) `funcs_proibidas` não-vazia. **Quem acrescentar um
-  dialeto na Fase 1/2 não escapa do gate** — falha no CI, não numa query. Fecha os dois gotchas abaixo.
-- [x] **Fase 0 · T10-T12 (2026-07-20):** doctor delega o probe (`sql_probe_escrita`/`erros_readonly`,
-  commit `afe6812`) → fiação e2e `tests/test_ataques_e2e.py` (15 casos, `94535d0`) → docs + CHANGELOG
-  0.3.0 + verificação final (`30ebd29`). Verificação final: 150/0 com banco, 126/24 sem, doctor 6/6,
-  ruff/format/mypy limpos.
-- [x] **Decidido (2026-07-16): os docs internos são públicos** — spec, plano, `CLAUDE.md` e
-  `worklog.md` versionados. Backup off-machine vale mais que arrumação estética.
-- [ ] **Revisão retroativa da Task 2** (o rename) — a formal nunca rodou.
-- [ ] **Fase 1 (MySQL) — EM EXECUÇÃO** na branch `refactor/fase-1-mysql` (pushada, em sincronia).
-  Plano (`7096897`) **revisado e corrigido** em 2026-07-20 (Achado #1 do `%s` → T2 patchada; + notas
-  de `get_lock`, autocommit×rollback e "medir o driver antes").
-  **Feitas:** T1 ✅ `2e484a4` (config `db_*` + extra mysql) · T2 ✅ `fa368b1` (introspecção no Nucleo
-  + `sql_introspecao`) — verificadas: 135/24 sem banco, **159/0 com banco**, doctor 6/6, mypy/ruff limpos.
-  **Faltam:** T3 (doctor dialeto-aware) · T4 (`erros_readonly` → predicado) · **T5 (`dialetos/mysql.py`
-  — MEDIR o `pool_reset_session` antes de codar: é o cadeado que falha aberta)** · T6 (corpus de ataque
-  MySQL + regressão `INTO OUTFILE`) · T7 (demo docker MySQL) · T8 (CI) · T9 (docs cadeados) ·
-  T10 (verificação final). **Fase 2 (SQL Server)** — plano próprio depois da 1.
-- [ ] **Escrita configurável** — spec próprio, quando chegar a hora. Ver o princípio acima.
-- [x] **Dívida menor `conn: Any` — resolvida (2026-07-20, `1b59fa2`, sessão paralela do Bruno):**
-  `_configurar`/`_resetar` tipados `psycopg.Connection[Any]` via `TYPE_CHECKING` (runtime segue lazy).
-  `linhas_como_dict` fica `Any` de propósito (membro do Protocol, agnóstico de driver).
+- [x] **Fase 0 — multi-dialeto (2026-07-16 a 07-20).** 12 tasks, `52bd464..30ebd29`. O núcleo
+  deixou de conhecer Postgres; contrato `Dialeto` + `dialetos/postgres.py`; 3 defeitos do spec
+  corrigidos com regressão; fiação e2e. Detalhe no
+  [plano](docs/superpowers/plans/2026-07-16-db-mcp-fase-0-multi-dialeto.md).
+- [x] **Fase 1 — MySQL (2026-07-20 e 07-21).** 10 tasks, `2e484a4..d00a0bd`. Config `db_*` →
+  introspecção no `Nucleo` → doctor dialeto-aware → `erro_readonly` predicado →
+  **`dialetos/mysql.py`** → corpus de ataque → demo MySQL → CI com os dois bancos → docs honestos
+  → verificação final. Resultados medidos no fim do
+  [plano](docs/superpowers/plans/2026-07-20-db-mcp-fase-1-mysql.md).
+- [ ] 🎯 **Decidir o merge da `refactor/fase-1-mysql` pro `main`.** O repo é público e o `main`
+  mostra só a Fase 0 — quem chega no GitHub não vê o MySQL. Fase 1 está verde e pushada.
+- [ ] **Fase 2 — SQL Server.** Plano próprio. Herda os gotchas do `tsql`/`sqlserver`,
+  `OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE` (passam pelo validador com raiz `Select`),
+  `WAITFOR DELAY` (só `ParseError`), nome de 3 partes cross-database, e a ausência de reset de
+  sessão. A tabela dos cadeados já tem a coluna dele — preenchê-la quando existir.
+- [ ] **Revisão retroativa da Task 2 da Fase 0** (o rename) — a formal nunca rodou.
+- [ ] **Escrita configurável** — spec próprio. Ver o princípio acima.
+- [ ] Todo commit tem autor `bruno.outcore@guarida.com.br`, ligando a identidade pública do GitHub
+  ao empregador. Considerar `git config user.email` dedicado se a separação importar.
 
 ## Pendências — auditoria 2026-07-17
-### Erros / quebrado
-- [x] ✅ **Resolvido 2026-07-20 (`30ebd29`):** `docs/DESIGN.md` não-objetivos — "outros SGBDs: nunca"
-  virou "MySQL/SQL Server são fases 1 e 2"; escrita passou a "fora do escopo atual (spec próprio)".
-- [x] ✅ **Resolvido 2026-07-20 (`30ebd29`):** `docs/03-arquitetura.md` (diagrama + tabela) e
-  `docs/VISAO-GERAL.md` — `db.py` descrito como fachada fina que delega ao dialeto; nova linha de
-  `dialetos/` na tabela de componentes.
-- [x] ✅ **Resolvido 2026-07-20:** `main` (default do GitHub, repo PÚBLICO) trazido em dia — ff pra
-  `refactor/fase-0-multi-dialeto` (Fase 0 + plano da Fase 1 + esta correção de docs), pushado. O repo
-  público mostra a Fase 0 completa **e o plano da Fase 1** por padrão (antes mostrava `pg-readonly-mcp`
-  0.2.0). Decisão aprovada pelo Bruno na sessão de 2026-07-20.
-- [x] ✅ **Resolvido 2026-07-20 (`94535d0`, T11):** `tests/test_ataques_e2e.py` existe — 15 casos de
-  fiação (12 ataques + SELECT legítimo + allowlist + auditoria), 15 passed com banco / 15 skipped sem.
-- [x] ✅ **Resolvido 2026-07-20 (`bc8f901`, T9) — parcial:** o `_validar_ident` foi **removido**, então
-  `descrever_tabela`/`listar_tabelas`/`listar_views` não estouram mais `ToolError` cru (o nome vai por
-  `params`). ✅ **A irmã do `amostra` foi fechada na T2 da Fase 1** (2026-07-20, `fa368b1`): a
-  introspecção desceu pro `Nucleo.introspectar`, que monta o SQL do dialeto dentro do `try/except
-  McpDbError` que AUDITA — recusa na geração agora deixa rastro (testado).
-
-### Sugestões
-- [x] ✅ **Resolvido 2026-07-20 (`30ebd29`):** `CHANGELOG.md` ganhou o entry `0.3.0` (rename BREAKING,
-  arquitetura multi-dialeto, os 3 defeitos + o do `TokenError`).
-- [ ] Todo commit do repo (o único público do portfólio) tem autor
-  `bruno.outcore@guarida.com.br` — liga a identidade pública do GitHub ao empregador. Considerar
-  `git config user.email` dedicado a este repo se a separação pessoal/Guarida importar.
-- [x] ✅ **Resolvido 2026-07-20 (`bc8f901`, T9):** `db.py::executar` docstring — os callers de
-  introspecção (`listar_tabelas`/`listar_views`/`descrever_tabela`) **passam `params` de verdade**
-  agora; a docstring deixou de ser aspiracional.
+Todas as pendências desta auditoria foram fechadas até 2026-07-21 (docs de arquitetura e
+não-objetivos corrigidos, `main` trazido em dia na época, `tests/test_ataques_e2e.py` criado,
+recusas de introspecção e de amostra passando a auditar, CHANGELOG em dia).
+✅ **Corrigido em 2026-07-21:** esta seção afirmava que a skill `setup-db-mcp` "ainda escreve
+chaves `pg_*` e vai gerar config quebrada". **Era falso** — ela escreve o `.env` a partir do
+`.env.example`, que já usa `DB_*`. Só a descrição dizia "PostgreSQL"; atualizada.
