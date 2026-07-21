@@ -8,9 +8,13 @@
 #   docker compose --profile mysql up -d              # MySQL (opcional)
 #   uv run db-mcp --env .env.demo-mysql doctor
 #
-# O MySQL fica atrás de um profile pra `docker compose up -d` continuar subindo só o
-# Postgres — quem só usa um banco não paga o outro. Portas 5433/3307 no host pra não
-# colidir com um Postgres/MySQL que você já tenha nas portas padrão.
+#   docker compose --profile sqlserver up -d          # SQL Server (opcional)
+#   uv run db-mcp --env .env.demo-sqlserver doctor
+#
+# MySQL e SQL Server ficam atrás de profiles pra `docker compose up -d` continuar
+# subindo só o Postgres — quem só usa um banco não paga os outros. Portas
+# 5433/3307/1434 no host pra não colidir com instâncias que você já tenha nas
+# portas padrão.
 
 services:
   db:
@@ -46,3 +50,22 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: db-mcp-demo-sqlserver
+    profiles: ["sqlserver"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Sonda_MCP_2026!"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1434:1433"   # 1433 costuma estar ocupada por instancia local
+    volumes:
+      - ./demo/init-sqlserver:/init:ro
+    entrypoint: ["/bin/bash", "/init/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10

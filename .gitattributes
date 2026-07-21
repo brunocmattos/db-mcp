@@ -1,0 +1,4 @@
+# Scripts que entram em container Linux (ex.: demo/init-sqlserver/entrypoint.sh) --
+# CRLF quebraria o shebang no checkout (MEDIDO: core.autocrlf=true neste repo, sem
+# .gitattributes, convertia LF->CRLF na hora do checkout e mangla "#!/bin/bash").
+*.sh text eol=lf

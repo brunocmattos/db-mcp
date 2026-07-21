@@ -5,6 +5,7 @@
 # .env.demo* têm credenciais FAKE dos bancos de demonstração (docker compose):
 !.env.demo
 !.env.demo-mysql
+!.env.demo-sqlserver
 *.cred
 config.yaml
 !config.example.yaml
