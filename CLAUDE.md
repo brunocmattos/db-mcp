@@ -108,12 +108,13 @@ resultados medidos no fim). Manual do produto em `docs/`.
 que ele já pode fazer, nunca somar.** `MODE=write` num `mcp_ro` continua não escrevendo. Escrita
 real exigirá usuário de banco diferente com GRANT — passo de deployment, não linha de YAML.
 
-### 🚨 Os cadeados NÃO portam igual entre bancos (Postgres e MySQL, MEDIDO)
-| | PostgreSQL | MySQL | SQL Server (Fase 2) |
+### 🚨 Os cadeados NÃO portam igual entre bancos (Postgres, MySQL e SQL Server, MEDIDO)
+| | PostgreSQL | MySQL | SQL Server |
 |---|---|---|---|
-| Cadeado nº 1 | `default_transaction_read_only` **no role** + GRANT | **só GRANT** + `SET SESSION TRANSACTION READ ONLY` por conexão | **só GRANT/DENY** |
-| Quem garante o read-only | o **servidor** | a **aplicação** (reaplica a cada checkout) | — |
-| Reset de sessão | `DISCARD ALL` | `RESET CONNECTION` | **não existe** |
+| Cadeado nº 1 | `default_transaction_read_only` **no role** + GRANT | **só GRANT** + `SET SESSION TRANSACTION READ ONLY` por conexão | **só `GRANT`/`DENY`** — não existe read-only de sessão (`SET TRANSACTION READ ONLY` → erro 156) |
+| Quem garante o read-only | o **servidor** | a **aplicação** (reaplica a cada checkout) | **o `GRANT`, e só ele** |
+| Reset de sessão | `DISCARD ALL` | `RESET CONNECTION` | **não existe** — por isso o dialeto abre conexão nova por consulta |
+| Erro do probe | `25006` | `42000` / `1142` | `262` (CREATE TABLE denied) |
 | Força real | cinto **e** suspensório | suspensório forte + cinto do app | **só suspensório** |
 
 Está documentado no README, `docs/02-preparar-o-banco.md` e `00-para-leigos.md`, **com a

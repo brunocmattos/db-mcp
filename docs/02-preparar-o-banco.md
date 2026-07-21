@@ -7,21 +7,24 @@ usuário só-leitura no banco e a liberação de rede. Fazer isto é pré-requis
 
 > ## ⚠️ Leia isto antes de escolher o quanto restringir
 >
-> Os dois cadeados **não têm a mesma força nos dois bancos**, e a diferença muda o que você
+> Os cadeados **não têm a mesma força nos três bancos**, e a diferença muda o que você
 > precisa fazer aqui:
 >
-> | | PostgreSQL | MySQL |
-> |---|---|---|
-> | Permissão | `GRANT SELECT` | `GRANT SELECT` |
-> | Transação read-only | `default_transaction_read_only` **no usuário** | só `SET SESSION TRANSACTION READ ONLY`, **por conexão** |
-> | Quem garante | o **servidor** | a **aplicação** (o db-mcp reaplica a cada conexão do pool) |
+> | | PostgreSQL | MySQL | SQL Server |
+> |---|---|---|---|
+> | Permissão | `GRANT SELECT` | `GRANT SELECT` | `GRANT`/`DENY` |
+> | Transação read-only | `default_transaction_read_only` **no usuário** | só `SET SESSION TRANSACTION READ ONLY`, **por conexão** | **não existe** — `SET TRANSACTION READ ONLY` dá erro 156 (sintaxe inválida) |
+> | Quem garante | o **servidor** | a **aplicação** (o db-mcp reaplica a cada conexão do pool) | **o `GRANT`, e só ele** |
+> | Erro do probe de escrita | `25006` | `42000` / `1142` | `262` (CREATE TABLE denied) |
 >
 > No PostgreSQL, mesmo com um bug no db-mcp, o servidor recusa a escrita — a trava está
 > gravada no usuário. **No MySQL não existe equivalente por usuário.** Lá, o `GRANT` é o
-> que de fato segura.
+> que de fato segura. **No SQL Server não existe cadeado de sessão nenhum** — nem parecido
+> com o do MySQL: o `GRANT`/`DENY` é a **única** coisa que segura a escrita.
 >
 > 👉 **Consequência prática: no MySQL, conceder `SELECT` só nas tabelas certas não é
-> "capricho de quem quer isolamento forte" — é a proteção principal.**
+> "capricho de quem quer isolamento forte" — é a proteção principal. No SQL Server, é a
+> proteção inteira.**
 
 ---
 
@@ -166,6 +169,96 @@ ALTER USER 'mcp_ro'@'SEU_IP' REQUIRE SSL;
 
 ---
 
+---
+
+# SQL Server
+
+Requer o extra do driver: `uv sync --extra sqlserver`, e `DIALETO=sqlserver` na config.
+
+## Cadeado nº 1: usuário só-leitura no banco
+
+```sql
+-- 1. cria o login. Os DENY logo abaixo NÃO SÃO OPCIONAIS — leia a seção seguinte antes
+--    de pular esta parte.
+USE master;
+GO
+CREATE LOGIN mcp_ro WITH PASSWORD = 'SUA_SENHA', CHECK_POLICY = OFF;
+GO
+DENY VIEW ANY DATABASE TO mcp_ro;
+DENY VIEW ANY DEFINITION TO mcp_ro;
+GO
+
+-- 2. no banco alvo, cria o usuário e concede SELECT tabela a tabela.
+--    NUNCA conceda db_datareader (ou qualquer papel amplo): aqui o GRANT é o ÚNICO
+--    cadeado que existe (veja o aviso no topo deste arquivo).
+USE SEU_BANCO;
+GO
+CREATE USER mcp_ro FOR LOGIN mcp_ro;
+GO
+GRANT SELECT ON dbo.clientes TO mcp_ro;
+GRANT SELECT ON dbo.pedidos  TO mcp_ro;
+-- views também precisam do GRANT explícito: com VIEW ANY DEFINITION negado, só aparece
+-- na introspecção (information_schema.views) o objeto em que o login tem permissão própria.
+GRANT SELECT ON dbo.pedidos_por_cliente TO mcp_ro;
+GO
+```
+
+> ⚠️ **Não existe passo equivalente ao `default_transaction_read_only` do Postgres nem ao
+> `SET SESSION TRANSACTION READ ONLY` do MySQL.** Medido: `SET TRANSACTION READ ONLY` no SQL
+> Server dá **erro 156** — sintaxe inválida, o comando simplesmente não existe nesse banco.
+> Não há "sessão read-only" para ligar, nem no usuário, nem por conexão. **O `GRANT`/`DENY`
+> acima é tudo o que protege.**
+
+### Os `DENY` não são enfeite — leia isto antes de decidir pular
+
+Medido contra um SQL Server 2022 real: **sem** os dois `DENY` acima, um login com
+`GRANT SELECT` numa única tabela ainda enxerga, de graça, sem precisar de mais nenhum
+privilégio:
+
+- a lista de **todos os bancos** da instância (`sys.databases`, 6 linhas no ambiente medido);
+- **todos os logins SQL** cadastrados no servidor (`sys.sql_logins`);
+- o **catálogo do banco `master`** inteiro (`master.sys.objects`).
+
+Isso não é dado de usuário — dado de outro banco continua recusado por padrão (erro
+**916**, enquanto o login não tiver acesso lá) —, mas é reconhecimento de terreno **de
+graça**, e **não tem equivalente no PostgreSQL nem no MySQL**.
+
+Com os dois `DENY` acima aplicados, mais `REVOKE CONNECT FROM guest` nos demais bancos da
+instância (se você administrar todos eles):
+
+- `master.sys.objects` cai de **3 linhas para 0**;
+- `sys.databases` cai de **6 linhas para 3** — `master`/`tempdb`/o próprio banco, que é o
+  piso do produto: não dá pra zerar mais que isso.
+
+Se você decidir pular os `DENY` mesmo assim, pelo menos saiba exatamente o que está
+aceitando: qualquer login que conecte no seu SQL Server, mesmo com uma única tabela
+liberada, sai enxergando quais outros bancos existem na instância e quem mais tem login ali.
+
+Confirme que não há escrita (deve dar erro 262):
+
+```sql
+-- conectado COMO mcp_ro:
+CREATE TABLE _teste_escrita (n int);   -- ERRO esperado: 262, permission denied
+```
+
+O `doctor` faz essa mesma prova sozinho, na checagem "Somente-leitura confirmado" — e
+repare que no SQL Server ela reporta `262` (permissão negada para `CREATE TABLE`), não
+`25006` (Postgres) nem `42000`/`1142` (MySQL). O erro genérico `229` (permission denied on
+the object, que também sobe por falta de `SELECT`) é ignorado **de propósito**: casá-lo
+faria o doctor confirmar "somente-leitura" numa conexão que na verdade falhou por outro
+motivo — e aqui o `GRANT` é o único cadeado que existe, então esse falso positivo seria o
+pior possível.
+
+## Cadeado nº 2: liberar a rede
+
+O SQL Server não tem um `pg_hba.conf`, nem embute o host no nome do login como o MySQL. O
+controle de origem vem de fora do banco: firewall do sistema operacional ou security group
+(em nuvem) na porta usada pela instância (1433 por padrão), liberando só as origens
+conhecidas — a máquina de dev, o servidor onde o MCP roda. Some autenticação por senha forte
+e, se o tráfego sair da máquina, um canal criptografado.
+
+---
+
 ## Validar tudo de uma vez
 
 Da máquina que vai rodar o MCP (com a rede/VPN ativa):
@@ -176,6 +269,7 @@ uv run db-mcp doctor
 
 As 6 checagens devem passar. Se "TCP inacessível", olhe a rede e o firewall. Se "Falha de
 autenticação", olhe a senha e a regra de origem (`pg_hba.conf` no Postgres; o host do
-usuário no MySQL). Se "NÃO é somente-leitura", revise os GRANTs acima — e note que essa
-checagem prova o cadeado **do banco**, não o do db-mcp: ela conecta sem aplicar nenhuma
-trava da aplicação, justamente pra medir o que o servidor recusa sozinho.
+usuário no MySQL; o firewall/security group no SQL Server). Se "NÃO é somente-leitura",
+revise os GRANTs/DENYs acima — e note que essa checagem prova o cadeado **do banco**, não o
+do db-mcp: ela conecta sem aplicar nenhuma trava da aplicação, justamente pra medir o que o
+servidor recusa sozinho.

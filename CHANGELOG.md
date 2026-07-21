@@ -3,6 +3,83 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [0.5.0] - 2026-07-21
+
+Fase 2: **o SQL Server passa a funcionar**. `db-mcp --dialect sqlserver doctor` fecha 6/6
+contra um SQL Server 2022 real, a suíte roda verde nos três bancos, e o CI ganha um oitavo
+job (`integration-sqlserver`). Diferente das duas fases anteriores, esta **tocou o
+núcleo**: o SQL Server expôs um bug real em `guardrails/policy.py` e duas suposições erradas
+em `doctor.py` — nenhuma das três hipotética, todas só apareceram rodando contra o banco de
+verdade pela primeira vez.
+
+### Added
+- **Dialeto SQL Server** (`dialetos/sqlserver.py`): conexão **sem pool**. O pymssql não tem
+  pool nem `RESET CONNECTION`, e o próprio SQL Server não tem nenhum reset de sessão
+  (`DISCARD ALL`/`RESET CONNECTION`) para reimplementar por conta própria — em vez disso, o
+  dialeto abre uma conexão nova a cada consulta: a conexão nova É o reset, e o gap que fez o
+  MySQL falhar aberto na Fase 1 (`pool_reset_session` zerando o read-only) deixa de existir
+  em vez de virar resíduo. Custo medido do handshake: ~14,3 ms (15,61 ms conexão nova vs
+  1,28 ms reusada), cerca de 1% do round-trip percebido numa consulta via MCP.
+- **`erro_readonly` reconhece `262`** (CREATE TABLE permission denied) como confirmação de
+  somente-leitura, e **recusa `229` de propósito**: esse código também sobe por falta de
+  `SELECT` simples, não só por escrita negada — casá-lo faria o doctor confirmar
+  "somente-leitura" numa conexão que na verdade falhou por outro motivo, no único banco
+  onde o `GRANT` é o cadeado inteiro.
+- **Lista de funções perigosas do T-SQL** (`FUNCS_PROIBIDAS_SQLSERVER`): `openquery`,
+  `opendatasource`, `openrowset` (o vetor de loopback mais grave do SQL Server), os `xp_*`
+  como `xp_cmdshell` (sobra-defesa: são stored procedures estendidas, só invocáveis via
+  `EXEC`, nunca dentro de um `SELECT` — a forma de ataque real já morre antes da blocklist)
+  e as `fn_*` de auditoria/trace/log de transação (`fn_get_audit_file`,
+  `fn_trace_gettable`, `fn_dblog`, `fn_dump_dblog`, `fn_my_permissions`).
+- **Corpus de ataque** (`tests/test_sql_sqlserver.py`) com a mesma distinção de dois grupos
+  que a Fase 1 estabeleceu para o MySQL: o que a blocklist de fato barra (o `openrowset` na
+  forma padrão de 3 argumentos, os `xp_*` e `fn_*` acima) e o que hoje só falha fechado
+  **por acidente de parser** (`OPENROWSET` com credencial via `;` ou `BULK`,
+  `WAITFOR DELAY`, `EXECUTE AS LOGIN`, o separador de lote `GO`) — regressão deliberada,
+  para que um upgrade do sqlglot que passe a parsear essas formas não abra o buraco em
+  silêncio.
+- **Demo SQL Server**: `docker compose --profile sqlserver up -d` sobe um SQL Server 2022
+  na porta 1434 com `.env.demo-sqlserver` pronto e a receita de usuário `mcp_ro` já com os
+  `DENY` necessários (`demo/init-sqlserver/03-mcp-ro.sql`).
+- **CI**: job `integration-sqlserver` — o seed roda via `docker exec`/`sqlcmd`, porque a
+  imagem do SQL Server, diferente das do Postgres/MySQL, não aplica `.sql` de um diretório
+  de init sozinha — e o extra `sqlserver` (`pymssql>=2.3`) somado ao `--all-extras` do CI.
+- **Documentação honesta dos cadeados por dialeto** (README, `02-preparar-o-banco.md`,
+  `CLAUDE.md`): a tabela ganha a coluna do SQL Server — não existe read-only de sessão
+  (`SET TRANSACTION READ ONLY` → erro 156, sintaxe inválida) nem reset de sessão; o
+  `GRANT`/`DENY` é o único cadeado que sobra. Receita nova em `02-preparar-o-banco.md` para
+  o vazamento de metadado medido no SQL Server: sem os `DENY`, um login com `GRANT SELECT`
+  numa tabela ainda enxerga todos os bancos da instância e todos os logins SQL.
+
+### Fixed
+- **`injetar_limit` reemitia o SQL de entrada em vez de reemitir no dialeto alvo**, nos
+  dois atalhos que existiam para pular a formatação quando o `LIMIT`/`FETCH` já estava
+  dentro do teto. O sqlglot faz parse leniente de `LIMIT` mesmo lendo como `tsql` — sintaxe
+  que o T-SQL não tem —, então uma consulta com `LIMIT` e valor dentro do teto batia nesse
+  atalho e saía **intocada**; o pymssql recusava com "Incorrect syntax near '1'", porque
+  `LIMIT` não existe no SQL Server. Bug real, não hipotético: só apareceu rodando o corpus
+  e2e contra um SQL Server de verdade pela primeira vez. Fix: os dois atalhos passam a
+  devolver `arvore.sql(dialect=dialeto)` em vez do `sql` de entrada; Postgres e MySQL saem
+  idênticos (medido, mesmo texto), só o T-SQL muda (`LIMIT` vira `TOP`).
+- **`doctor.py` tinha duas suposições implícitas de Postgres/MySQL.** `checar_latencia`
+  rodava `SELECT 1` cru — o cursor `as_dict` do pymssql levanta erro numa coluna sem nome;
+  virou `SELECT 1 AS um`, SQL genérico, sem o núcleo passar a conhecer o driver.
+  `checar_somente_leitura` só lia `getattr(e, "sqlstate", "")` — o pymssql não expõe esse
+  atributo, e a mensagem da checagem virava só "OperationalError", perdendo o número que
+  identifica a recusa; o fix cai para o primeiro item de `.args` (onde o pymssql põe o
+  número, ex. `262`) só quando `sqlstate` não existir.
+- **`allowlist` descartava o `catalog` de uma referência de tabela** (`tabelas_referenciadas`
+  montava o nome só com `t.db + t.name`), então `outrodb.public.clientes` virava
+  `public.clientes` e casava com a entrada feita para o banco corrente. Latente e não
+  explorável no Postgres/MySQL (ambos recusam nome de 3 partes no próprio servidor), mas o
+  SQL Server **executa** esse nome — a Fase 2 abriria o buraco no dia em que existisse. Por
+  isso o fix veio antes do plano da fase, sozinho: qualquer referência que nomeie um
+  catalog passa a ser **recusada**, mesmo com `allowlist=["*"]`.
+
+### Changed
+- `pyproject.toml` ganha o extra `sqlserver` (`pymssql>=2.3` — sem pool nem reset de
+  sessão, medido: nenhum símbolo "pool" no módulo).
+
 ## [0.4.0] - 2026-07-21
 
 Fase 1: **o MySQL passa a funcionar**. `db-mcp --dialect mysql doctor` fecha 6/6, e a
