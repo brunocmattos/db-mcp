@@ -16,7 +16,7 @@ de auth e de read-only. Faça esse passo antes de seguir.
 
 - Python 3.11+ (o projeto fixa a 3.12 via `.python-version`; o CI testa 3.12 e 3.13).
 - [`uv`](https://docs.astral.sh/uv/) instalado.
-- Rede até o banco: a máquina que roda o MCP precisa alcançar `PG_HOST:PG_PORT`,
+- Rede até o banco: a máquina que roda o MCP precisa alcançar `DB_HOST:DB_PORT`,
   muitas vezes por VPN. Sem isso, o `doctor` falha em "TCP inacessível".
 - O usuário read-only do Passo 0.
 
@@ -41,12 +41,12 @@ cp config.example.yaml config.yaml   # opcional; sem ele, valem os defaults
 Edite `.env` (exemplo com placeholders):
 
 ```dotenv
-PG_HOST=SEU_HOST
-PG_PORT=5432
-PG_DBNAME=SEU_BANCO
-PG_USER=mcp_ro
-PG_PASSWORD=SUA_SENHA
-PG_SSLMODE=prefer
+DB_HOST=SEU_HOST
+DB_PORT=5432
+DB_DBNAME=SEU_BANCO
+DB_USER=mcp_ro
+DB_PASSWORD=SUA_SENHA
+DB_SSLMODE=prefer
 ```
 
 `.env` e `config.yaml` são git-ignored e nunca sobem pro repositório.

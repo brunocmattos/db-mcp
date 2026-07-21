@@ -21,12 +21,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     # --- conexão / segredos (via .env / env vars) ---
-    pg_host: str
-    pg_port: int = 5432
-    pg_dbname: str
-    pg_user: str = "mcp_ro"
-    pg_password: str
-    pg_sslmode: str = "prefer"
+    db_host: str
+    db_port: int | None = None  # sem default universal (5432≠3306): cada dialeto aplica a sua porta
+    db_dbname: str
+    db_user: str = "mcp_ro"
+    db_password: str
+    db_sslmode: str = "prefer"
     auth_token: str | None = None
 
     # --- ajustes (via config.yaml, com env como override) ---

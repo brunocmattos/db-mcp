@@ -6,9 +6,9 @@ Cada `[X]` já vem com uma linha `↳` de remediação. Resumo:
 
 | Checagem falha | Causa provável | O que fazer |
 |---|---|---|
-| Config inválida / não carregou | falta `PG_HOST`/`PG_DBNAME`/`PG_PASSWORD` no `.env` | preencha o `.env` (veja `.env.example`); cheque `--env`/`--config`. |
+| Config inválida / não carregou | falta `DB_HOST`/`DB_DBNAME`/`DB_PASSWORD` no `.env` | preencha o `.env` (veja `.env.example`); cheque `--env`/`--config`. |
 | TCP inacessível | rede/VPN/firewall/`pg_hba` | ligue a VPN; teste `nc -vz SEU_HOST SUA_PORTA`; confira a linha do `mcp_ro` no `pg_hba.conf`. |
-| Falha de autenticação | senha errada ou `pg_hba` não libera | confira `PG_PASSWORD`/`PG_SSLMODE`; ajuste `pg_hba.conf` e `SELECT pg_reload_conf();`. |
+| Falha de autenticação | senha errada ou `pg_hba` não libera | confira `DB_PASSWORD`/`DB_SSLMODE`; ajuste `pg_hba.conf` e `SELECT pg_reload_conf();`. |
 | NÃO é somente-leitura | o `mcp_ro` consegue escrever (falha de segurança) | `REVOKE ALL` e conceda só `SELECT`; veja [`02-preparar-o-banco.md`](02-preparar-o-banco.md). |
 | Tabelas da allowlist ausentes | nome errado ou sem `GRANT` | corrija `schema.tabela` na `allowlist`, ou o `GRANT SELECT` do `mcp_ro`. |
 | Latência crítica | rota de rede/VPN ruim | verifique a VPN; acima de 250ms vira só aviso, e a checagem só falha passando de 2s. |

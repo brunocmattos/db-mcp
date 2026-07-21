@@ -24,7 +24,7 @@ class FakeDB:
 
 
 def _settings(monkeypatch, **over):
-    base = {"pg_host": "h", "pg_dbname": "d", "pg_password": "p"}
+    base = {"db_host": "h", "db_dbname": "d", "db_password": "p"}
     base.update(over)
     for k, v in base.items():
         monkeypatch.setenv(k.upper(), str(v))
@@ -258,6 +258,67 @@ def test_amostra_clampa_n(monkeypatch, tmp_path):
     assert "1000000000" not in nucleo.db.ultimo_sql
 
 
+# --- T2: introspecção desce pro Nucleo (auditada, testável, SEM validar) --------------
+# O `%s` NÃO parseia no dialeto mysql (medido, sqlglot 30.12): validar()/injetar_limit()
+# derrubariam a introspecção. A rota usa validar_sql=False — seguro, pois o identificador
+# vai por `params` (zero injeção) e o fetchmany(max_rows) limita as linhas sem o LIMIT.
+
+
+def test_introspectar_tabelas_monta_sql_do_dialeto_com_params(monkeypatch, tmp_path):
+    log = tmp_path / "a.log"
+    s = _settings(monkeypatch, audit_log_path=str(log))
+    nucleo = Nucleo(s, db=FakeDB())
+
+    resp = nucleo.introspectar("tabelas", schema="vendas", cliente="t")
+    assert resp["linhas"] == [{"ok": 1}]
+    # o nome vai por params, nunca concatenado no SQL
+    assert nucleo.db.ultimo_params == ("vendas",)
+    assert "%s" in nucleo.db.ultimo_sql and "vendas" not in nucleo.db.ultimo_sql
+    # SEM validar => SEM LIMIT injetado (o fetchmany é quem limita)
+    assert "LIMIT" not in nucleo.db.ultimo_sql.upper()
+    assert json.loads(log.read_text(encoding="utf-8").strip())["veredito"] == "ok"
+
+
+def test_introspectar_resolve_schema_padrao_do_dialeto(monkeypatch, tmp_path):
+    s = _settings(monkeypatch, audit_log_path=str(tmp_path / "a.log"))
+    nucleo = Nucleo(s, db=FakeDB())
+    # sem schema => usa dialeto.schema_padrao ("public" no Postgres)
+    nucleo.introspectar("tabelas", cliente="t")
+    assert nucleo.db.ultimo_params == ("public",)
+
+
+def test_introspectar_schemas_nao_leva_params(monkeypatch, tmp_path):
+    s = _settings(monkeypatch, audit_log_path=str(tmp_path / "a.log"))
+    nucleo = Nucleo(s, db=FakeDB())
+    nucleo.introspectar("schemas", cliente="t")
+    # sem binds => None (NÃO () ): o psycopg só interpola `%` quando params é sequência,
+    # e o LIKE 'pg_%' da query quebraria a interpolação. Regressão do bug pego no e2e.
+    assert nucleo.db.ultimo_params is None
+    assert "information_schema.schemata" in nucleo.db.ultimo_sql
+
+
+def test_introspectar_colunas_passa_schema_e_tabela(monkeypatch, tmp_path):
+    s = _settings(monkeypatch, audit_log_path=str(tmp_path / "a.log"))
+    nucleo = Nucleo(s, db=FakeDB())
+    nucleo.introspectar("colunas", schema="s", tabela="clientes", cliente="t")
+    assert nucleo.db.ultimo_params == ("s", "clientes")
+
+
+def test_introspectar_tipo_invalido_e_auditada(monkeypatch, tmp_path):
+    # espelha o amostra: um raise na geração do SQL audita ANTES de propagar
+    log = tmp_path / "a.log"
+    s = _settings(monkeypatch, audit_log_path=str(log))
+    nucleo = Nucleo(s, db=FakeDB())
+
+    with pytest.raises(SqlInvalido):
+        nucleo.introspectar("inexistente", cliente="atacante")
+
+    registro = json.loads(log.read_text(encoding="utf-8").strip())
+    assert registro["veredito"] == "sql_invalido"
+    assert registro["cliente"] == "atacante"
+    assert "inexistente" in registro["sql"]  # o tipo tentado fica na trilha
+
+
 def test_servidor_com_auth_token_configura_auth(monkeypatch):
     s = _settings(monkeypatch, auth_token="segredo")
     mcp = construir_servidor(s, conectar=False)
@@ -275,7 +336,7 @@ def test_cli_recusa_http_sem_token(monkeypatch):
     # endpoint HTTP ficaria aberto). A checagem acontece antes de tocar no banco.
     from db_mcp import cli
 
-    for k, v in {"PG_HOST": "h", "PG_DBNAME": "d", "PG_PASSWORD": "p", "TRANSPORT": "http"}.items():
+    for k, v in {"DB_HOST": "h", "DB_DBNAME": "d", "DB_PASSWORD": "p", "TRANSPORT": "http"}.items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("AUTH_TOKEN", raising=False)
     monkeypatch.setattr("sys.argv", ["db-mcp", "--env", "/nao/existe", "run"])

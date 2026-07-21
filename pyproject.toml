@@ -1,6 +1,6 @@
 [project]
 name = "db-mcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP server that gives read-only access to PostgreSQL, MySQL and SQL Server"
 readme = "README.md"
 license = "MIT"
@@ -42,6 +42,11 @@ dependencies = [
     "pydantic-settings>=2.4",
     "pyyaml>=6",
 ]
+
+[project.optional-dependencies]
+# Driver do MySQL — tem pool nativo E RESET CONNECTION (o PyMySQL não tem nenhum
+# dos dois). Opcional: `uv sync --extra mysql` instala. Import lazy no dialeto (Fase 1, T5).
+mysql = ["mysql-connector-python>=9"]
 
 [project.scripts]
 db-mcp = "db_mcp.cli:main"

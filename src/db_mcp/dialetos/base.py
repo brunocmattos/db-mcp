@@ -42,10 +42,51 @@ class Dialeto(Protocol):
     nome: str
     sqlglot_dialeto: str
     funcs_proibidas: frozenset[str]
-    schema_padrao: str
-    erros_readonly: tuple[type[Exception], ...]
+    porta_padrao: int  # 5432≠3306: `db_port` é opcional e cada dialeto aplica a sua
+
+    @property
+    def schema_padrao(self) -> str:
+        """Schema assumido quando o cliente não informa um.
+
+        Propriedade (somente leitura), não atributo: no Postgres é a constante
+        `"public"`, mas no MySQL SCHEMA é sinônimo de DATABASE — o padrão é o database
+        configurado, que só se conhece pelo `Settings`. Um atributo de classe forçaria
+        o dialeto MySQL a fingir uma constante que ele não tem.
+        """
+        ...
 
     def criar_pool(self, s: Settings) -> PoolLike: ...
+
+    def erro_readonly(self, e: Exception) -> bool:
+        """True se a exceção do driver significa "escrita recusada por ser read-only".
+
+        Predicado, não tupla de classes: o mysql-connector não dá classe própria aos
+        erros 1792 (read-only transaction) e 1142 (sem privilégio) — distingui-los exige
+        olhar o `.errno`. Casar por classe base lá pegaria erro de banco QUALQUER e o
+        doctor daria "somente-leitura confirmado" para uma conexão gravável — o falso
+        positivo perigoso, no cadeado que já falha aberta.
+        """
+        ...
+
+    def conectar_doctor(self, s: Settings) -> Any:
+        """Conexão avulsa (fora do pool) para o doctor, em autocommit.
+
+        Fora do pool de propósito: o doctor checa a saúde da configuração antes de
+        o servidor existir, e o probe de escrita precisa de uma sessão que ele
+        controle. Erro de conexão/autenticação sobe cru — o doctor decide com
+        `erro_do_banco`.
+        """
+        ...
+
+    def probar_escrita(self, conn: Any) -> None:
+        """Roda o `sql_probe_escrita` e VOLTA se o banco ACEITOU a escrita (ruim).
+
+        Se o banco recusar, deixa o erro do driver subir — quem classifica é o
+        doctor, por `erros_readonly`. A impl é responsável por não deixar nada
+        gravado quando a escrita passa (o Postgres reverte a transação; o MySQL
+        fará o seu na T5 — lá o DDL tem commit implícito).
+        """
+        ...
 
     def erro_de_timeout(self, e: Exception) -> bool:
         """True se a exceção do driver representa query cortada por timeout."""
@@ -67,4 +108,26 @@ class Dialeto(Protocol):
 
     def sql_probe_escrita(self) -> str:
         """DDL que o doctor tenta e ESPERA que falhe."""
+        ...
+
+    def sql_identidade(self) -> str:
+        """SELECT de UMA linha com quem/onde estamos conectados.
+
+        Deve nomear as colunas `usuario` e `banco` (o doctor lê por essas chaves):
+        o `current_database()` do Postgres é `database()` no MySQL, então sem apelido
+        a chave do dict mudaria junto com o dialeto.
+        """
+        ...
+
+    def sql_introspecao(
+        self, tipo: str, schema: str | None = None, tabela: str | None = None
+    ) -> tuple[str, tuple[Any, ...]]:
+        """SQL + params de introspecção (tipo: tabelas/views/colunas/schemas).
+
+        Devolve (sql, params): o identificador (schema/tabela) vai por query parameter
+        (%s), nunca concatenado — mata a injeção sem regex. Esta rota NÃO passa pelo
+        validador (o `%s` não parseia em todo dialeto — mysql dá ParseError): é SQL
+        fixo e confiável. Recusa (tipo inválido; ou schema != database no MySQL, Fase 1
+        T5) levanta McpDbError, auditado no Nucleo.introspectar.
+        """
         ...

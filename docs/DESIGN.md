@@ -197,12 +197,12 @@ subida. Os valores abaixo são placeholders; cada deployment preenche com os seu
 
 | Parâmetro | Onde | Default | Descrição |
 |---|---|---|---|
-| `PG_HOST` | .env | — | host do Postgres alvo |
-| `PG_PORT` | .env | `5432` | porta |
-| `PG_DBNAME` | .env | — | banco alvo |
-| `PG_USER` | .env | `mcp_ro` | usuário read-only |
-| `PG_PASSWORD` | .env | — | segredo |
-| `PG_SSLMODE` | .env | `prefer` | modo TLS |
+| `DB_HOST` | .env | — | host do Postgres alvo |
+| `DB_PORT` | .env | `5432` | porta |
+| `DB_DBNAME` | .env | — | banco alvo |
+| `DB_USER` | .env | `mcp_ro` | usuário read-only |
+| `DB_PASSWORD` | .env | — | segredo |
+| `DB_SSLMODE` | .env | `prefer` | modo TLS |
 | `TRANSPORT` | yaml | `stdio` | `stdio` ou `http` |
 | `HTTP_HOST` / `HTTP_PORT` | yaml | `127.0.0.1` / `8080` | quando `http` |
 | `AUTH_TOKEN` | .env | — | segredo, exigido no transporte `http` |
