@@ -48,6 +48,11 @@ dependencies = [
 # dos dois). Opcional: `uv sync --extra mysql` instala. Import lazy no dialeto (Fase 1, T5).
 mysql = ["mysql-connector-python>=9"]
 
+# Driver do SQL Server — pymssql NÃO tem pool nem reset de sessão (medido: nenhum
+# símbolo "pool" no módulo). Por isso o dialeto abre conexão por consulta; ver §3 do
+# spec da Fase 2. pyodbc daria pooling via gerenciador ODBC, mas exige msodbcsql18 no SO.
+sqlserver = ["pymssql>=2.3"]
+
 [project.scripts]
 db-mcp = "db_mcp.cli:main"
 
