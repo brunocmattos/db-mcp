@@ -20,7 +20,7 @@ bancos. Use o índice para pular pro que te interessa.
 6. [Funciona com qualquer banco?](#funciona-com-qualquer-banco)
 7. [Vantagens sobre outros MCPs, funcionalidades e o que falta](#vantagens-sobre-outros-mcps-funcionalidades-e-o-que-falta)
 8. [Como criar um MCP do zero, e feito-à-mão vs pronto](#como-criar-um-mcp-do-zero-e-feito-à-mão-vs-pronto)
-9. [Dá pra adaptar para MySQL e SQL Server? (MCP "dinâmico")](#dá-pra-adaptar-para-mysql-e-sql-server-mcp-dinâmico)
+9. [Como o MCP virou "dinâmico": PostgreSQL, MySQL e SQL Server no mesmo código](#como-o-mcp-virou-dinâmico-postgresql-mysql-e-sql-server-no-mesmo-código)
 
 ## O que é um MCP (do zero)
 
@@ -95,7 +95,7 @@ Em qualquer situação em que alguém — pessoa ou automação — precisa **co
 
 O fio que costura todos os casos é o mesmo: **sempre leitura**. No momento em que a tarefa for escrever, alterar ou apagar algo, esta ferramenta não é a certa — e essa recusa é justamente o ponto dela.
 
-Uma observação honesta de escopo: o db-mcp fala com **PostgreSQL** e **MySQL**. Ainda não fala SQL Server (está planejado). Em compensação, funciona com **qualquer** almoxarifado dessas duas marcas — você aponta a ferramenta para o seu banco na configuração, e o código não conhece nenhum banco específico de antemão.
+Uma observação honesta de escopo: o db-mcp fala com **PostgreSQL**, **MySQL** e **SQL Server**. Funciona com **qualquer** almoxarifado dessas três marcas — você aponta a ferramenta para o seu banco na configuração, e o código não conhece nenhum banco específico de antemão.
 
 ## Como usar (e é fácil de configurar e de entender?)
 
@@ -230,7 +230,7 @@ Fora esses dois pontos, não há outro furo conhecido — e eles ficam à mostra
 
 ### Vale pra qualquer PostgreSQL ou MySQL
 
-Por fim, uma escolha de projeto: o programa **não conhece banco nenhum específico**. Você aponta pro seu PostgreSQL pela configuração, e ele funciona — seja qual for o seu banco. O código não tem nenhuma tabela ou empresa embutida. A contrapartida honesta é que ele fala **PostgreSQL e MySQL** hoje — ainda não fala SQL Server.
+Por fim, uma escolha de projeto: o programa **não conhece banco nenhum específico**. Você aponta pro seu banco pela configuração, e ele funciona — seja qual for o seu banco, contanto que seja um dos três suportados. O código não tem nenhuma tabela ou empresa embutida. Ele fala **PostgreSQL, MySQL e SQL Server** hoje.
 
 ## Quais seguranças ele tem, e existem brechas?
 
@@ -246,9 +246,9 @@ Quando você prepara o banco, cria um usuário exclusivo para a IA. Esse usuári
 
 Por que este é o mais forte? Porque não depende do nosso programa acertar nada. Mesmo que todo o resto falhasse, o banco continuaria recusando escrita sozinho. O manual do projeto (`docs/02-preparar-o-banco.md`) ensina a montar esse usuário passo a passo.
 
-**Aqui vem uma diferença que o projeto não esconde.** No PostgreSQL dá para pendurar no usuário uma trava extra (`default_transaction_read_only = on`) que faz o banco tratar **toda** conversa daquele usuário como leitura — para sempre, sem depender de mais nada. **O MySQL não tem isso.** Lá existe uma trava parecida, mas que vale só para a conexão da vez, e é o **nosso programa** que precisa ligá-la toda vez que pega uma conexão emprestada. Nós ligamos — e temos um teste automático que garante que continuará sendo ligado —, mas é código nosso, não garantia do almoxarifado.
+**Aqui vem uma diferença que o projeto não esconde.** No PostgreSQL dá para pendurar no usuário uma trava extra (`default_transaction_read_only = on`) que faz o banco tratar **toda** conversa daquele usuário como leitura — para sempre, sem depender de mais nada. **O MySQL não tem isso.** Lá existe uma trava parecida, mas que vale só para a conexão da vez, e é o **nosso programa** que precisa ligá-la toda vez que pega uma conexão emprestada. Nós ligamos — e temos um teste automático que garante que continuará sendo ligado —, mas é código nosso, não garantia do almoxarifado. **E o SQL Server não tem trava nenhuma dessas.** Medido: pedir "esta sessão é só leitura" para um SQL Server dá um erro de sintaxe — o comando nem existe ali. Não há trava para pendurar no usuário, nem uma versão mais fraca por conexão para o nosso programa ligar. O que sobra é só o `GRANT` (e o seu oposto, o `DENY`, que o SQL Server também oferece).
 
-Tradução prática: **no MySQL, escolher direitinho quais fichas o crachá pode ver (`GRANT SELECT` só nas tabelas certas) não é capricho, é a proteção principal.** No PostgreSQL isso é a segunda camada; no MySQL, é a primeira.
+Tradução prática: **no MySQL, escolher direitinho quais fichas o crachá pode ver (`GRANT SELECT` só nas tabelas certas) não é capricho, é a proteção principal.** No PostgreSQL isso é a segunda camada; no MySQL, é a primeira. **No SQL Server, é a única que existe** — não há segunda camada nenhuma por trás dela.
 
 ### Cadeado nº 2: só entra quem vem do endereço certo
 
@@ -289,7 +289,7 @@ Por isso a regra de ouro do projeto: **o cadeado mais forte é o do próprio ban
 
 ## Funciona com qualquer banco?
 
-Resposta curta: sim, contanto que seja **PostgreSQL ou MySQL**. SQL Server ainda não.
+Resposta curta: sim, contanto que seja **PostgreSQL, MySQL ou SQL Server**.
 
 O motivo é que o programa não vem com nenhum banco embutido. Ele não conhece "o seu banco". Você é quem aponta para onde ele deve ir, escrevendo o endereço num arquivo de configuração. É como um garçom que não trabalha num restaurante fixo: você diz o endereço e ele vai servir naquele lugar.
 
@@ -298,7 +298,7 @@ O motivo é que o programa não vem com nenhum banco embutido. Ele não conhece 
 Os dados de conexão ficam num arquivo chamado `.env` (pense nele como uma ficha de contato guardada num cofrinho, porque ali vai a senha). São seis informações:
 
 - `DB_HOST` — o endereço do banco (o "prédio" onde ele mora na rede).
-- `DB_PORT` — a porta de entrada nesse endereço (o padrão do PostgreSQL é a `5432`; a do MySQL, `3306`). Se você deixar em branco, o programa usa a porta certa para o banco escolhido.
+- `DB_PORT` — a porta de entrada nesse endereço (o padrão do PostgreSQL é a `5432`; a do MySQL, `3306`; a do SQL Server, `1433`). Se você deixar em branco, o programa usa a porta certa para o banco escolhido.
 - `DB_DBNAME` — o nome do banco específico (um mesmo servidor pode guardar vários almoxarifados; você escolhe qual).
 - `DB_USER` e `DB_PASSWORD` — o crachá e a senha com que o programa se identifica.
 - `DB_SSLMODE` — se a conversa com o banco vai por um canal fechado à prova de bisbilhoteiro (por padrão vem como `prefer`, que usa o canal fechado quando o banco oferece).
@@ -309,17 +309,17 @@ Você troca esses seis valores e pronto: o mesmo programa passa a falar com outr
 
 O programa não se instala sozinho dentro do seu banco. Duas coisas precisam existir lá, e quem faz é um administrador do banco (ou a skill de instalação, que ajuda no passo a passo):
 
-1. **Criar o crachá de "só olhar".** Um usuário novo (o padrão se chama `mcp_ro`) que tem permissão de ler, e só ler. Isso é feito com dois comandos: um dá permissão de leitura nas tabelas (`GRANT SELECT`), e outro liga uma trava do próprio PostgreSQL que recusa qualquer escrita naquele crachá (`default_transaction_read_only = on`). É o cadeado mais forte, porque quem segura a porta é o banco, não o nosso programa.
+1. **Criar o crachá de "só olhar".** Um usuário novo (o padrão se chama `mcp_ro`) que tem permissão de ler, e só ler. O núcleo é sempre um `GRANT SELECT` nas tabelas certas. No PostgreSQL some ainda uma trava extra do próprio banco que recusa qualquer escrita daquele crachá para sempre (`default_transaction_read_only = on`); no MySQL essa trava existe só por conexão, e quem liga é o nosso programa; no SQL Server essa trava **não existe de jeito nenhum** — lá o `GRANT` (e o seu oposto, o `DENY`) é o cadeado inteiro. Cada banco tem seu próprio manual em [`docs/02-preparar-o-banco.md`](02-preparar-o-banco.md).
 
-2. **Liberar o seu endereço na portaria da rede.** O PostgreSQL tem uma lista de portaria chamada `pg_hba.conf`. Nela você diz: "esse crachá `mcp_ro` só pode entrar vindo de tais endereços" (a sua máquina, o servidor onde o MCP roda). De qualquer outro lugar, o banco nem abre a porta.
+2. **Liberar o seu endereço na portaria da rede.** No PostgreSQL isso é uma lista de portaria chamada `pg_hba.conf`; no MySQL o próprio nome do usuário já carrega o endereço permitido; no SQL Server é o firewall ou o security group da máquina/nuvem. Em qualquer um dos três, a ideia é a mesma: "esse crachá `mcp_ro` só pode entrar vindo de tais endereços" (a sua máquina, o servidor onde o MCP roda). De qualquer outro lugar, o banco nem abre a porta.
 
 Sem esses dois passos, a ferramenta de autodiagnóstico (o `doctor`) acusa o problema logo de cara, antes de qualquer uso.
 
 ### Versões e onde ele roda (a verdade sem enfeite)
 
-- Por baixo, o programa usa uma peça chamada **psycopg 3** (o "tradutor" que sabe conversar em PostgreSQL). É ela que fala o "idioma" do banco — e é por isso que o mesmo programa serve para qualquer PostgreSQL para onde você apontar, sem conhecer nenhum banco específico.
-- Funciona bem com bancos **na nuvem** — Amazon RDS, Google Cloud SQL e parecidos — com uma condição honesta: você precisa conseguir **criar aquele usuário de leitura** e **alcançar o banco pela rede** (o que às vezes exige liberar um IP ou ligar uma VPN). Se você consegue essas duas coisas, funciona.
-- Limite claro: hoje ele fala **PostgreSQL e MySQL**. Ainda não serve para SQL Server nem para outros bancos.
+- Por baixo, cada banco tem seu próprio "tradutor": **psycopg 3** para o PostgreSQL, **mysql-connector** para o MySQL, **pymssql** para o SQL Server. Cada um fala o "idioma" daquele banco — e é por isso que o mesmo programa serve para qualquer banco dessas três marcas para onde você apontar, sem conhecer nenhum banco específico de antemão.
+- Funciona bem com bancos **na nuvem** — Amazon RDS, Google Cloud SQL, Azure SQL e parecidos — com uma condição honesta: você precisa conseguir **criar aquele usuário de leitura** e **alcançar o banco pela rede** (o que às vezes exige liberar um IP ou ligar uma VPN). Se você consegue essas duas coisas, funciona.
+- Limite claro: hoje ele fala **PostgreSQL, MySQL e SQL Server**. Ainda não serve para outras marcas de banco (Oracle, SQLite e outras ficam de fora).
 
 ## Vantagens sobre outros MCPs, funcionalidades e o que falta
 
@@ -354,7 +354,7 @@ O db-mcp escolheu deliberadamente ser o contrário de um canivete suíço: uma f
 Ser afiado numa coisa só custa caro em outras. Sendo honesto:
 
 - **Só lê, não escreve.** Se você precisa que a IA insira, corrija ou apague dados, este projeto não serve. O Postgres MCP Pro serve. Aqui a incapacidade de escrever é o produto, não uma falha — mas é uma limitação real.
-- **Fala PostgreSQL e MySQL, mas não SQL Server** (nem Oracle, nem SQLite). Alguns MCPs concorrentes cobrem mais dialetos.
+- **Fala PostgreSQL, MySQL e SQL Server, mas não Oracle nem SQLite** (nem outras marcas). Alguns MCPs concorrentes cobrem mais dialetos.
 - **Não analisa desempenho.** Ele não tem o **EXPLAIN** (o recurso do Postgres que mostra o "plano de execução" — o passo a passo que o banco pretende seguir para responder, útil para descobrir por que uma consulta está lenta). O Postgres MCP Pro faz isso e ainda sugere melhorias. Este aqui, não.
 - **Não expõe métricas Prometheus.** Prometheus é um sistema muito usado para monitorar programas em produção, coletando números como "quantas consultas por segundo" num painel. Este projeto não oferece esse encaixe pronto (ele registra tudo num arquivo de auditoria, o que é mais simples e menos sofisticado).
 - **Um banco por instância.** Cada cópia rodando fala com um único banco. Para atender três bancos, você sobe três cópias. Alguns concorrentes lidam com vários de uma vez.
@@ -486,83 +486,49 @@ E há dois pontos fracos **conhecidos e já anotados** na documentação, não e
 
 Essa honestidade é, ela mesma, uma vantagem do sob medida. Você sabe onde estão as beiradas do seu próprio sistema. Numa caixa-preta de prateleira, essas beiradas existem do mesmo jeito — você só não faz ideia de onde ficam.
 
-## Dá pra adaptar para MySQL e SQL Server? (MCP "dinâmico")
+## Como o MCP virou "dinâmico": PostgreSQL, MySQL e SQL Server no mesmo código
 
 Uma pergunta natural: será que dá pra pegar este projeto e transformar num garçom que sabe atender três almoxarifados diferentes — PostgreSQL, MySQL e SQL Server — escolhendo qual banco na hora de instalar?
 
+A resposta não é mais hipótese: **já foi feito, duas vezes.** Primeiro o MySQL, depois o SQL Server. Esta seção conta como, e — mais importante — o que deu errado no meio do caminho, porque as pegadinhas reais só apareceram testando contra um banco de verdade, nunca só lendo o código.
+
 Antes de tudo, os nomes. PostgreSQL, MySQL e SQL Server são três marcas de banco de dados. Pense em três redes de almoxarifado concorrentes. Todas guardam fichas em prateleiras e todas atendem pedidos escritos numa linguagem chamada SQL. Só que cada rede tem seu sotaque de SQL, suas regras internas e seu próprio jeito de organizar o catálogo. É como três países que falam "a mesma língua", mas com gírias e leis diferentes.
 
-A resposta curta: **sim, é viável, e o projeto foi montado de um jeito que ajuda. Mas é uma obra, não um retoque de uma tarde.** Vou destrinchar por quê.
+### O que amarrava tudo a um banco só
 
-### O que hoje amarra tudo ao PostgreSQL
+Na primeira versão deste projeto, quatro pedaços do código só sabiam falar "postgresês": o driver que liga no banco (`psycopg`, importado direto em `db.py`), o sotaque que o validador de SQL entendia (fixo em `read="postgres"`), o jeito de consultar o catálogo (filtros e nomes específicos do Postgres) e o comando que declara uma conexão "só leitura" (`conn.read_only = True`, que só existe daquele jeito no Postgres).
 
-Quatro pedaços do código só sabem falar "postgresês".
+### A "tomada universal": um contrato, três encaixes
 
-**1. O driver.** Driver é a peça que efetivamente conversa com o banco pela rede — o telefone que liga o nosso código no almoxarifado. O projeto usa um driver chamado `psycopg`, que só liga em PostgreSQL. No arquivo `src/db_mcp/db.py` isso está logo no topo: `import psycopg`. Para MySQL ou SQL Server, esse telefone não disca.
+A peça que resolveu isso é um contrato chamado `Dialeto` (no código, `src/db_mcp/dialetos/base.py`): uma lista fixa do que "todo banco precisa saber fazer" — conectar, ler linhas como dicionário, dizer se um erro do driver significa "recusou por ser somente-leitura", dizer qual é a lista de funções perigosas daquele banco, montar o SQL de introspecção. O resto do programa (o "cérebro", chamado `Nucleo`) conversa só com esse contrato, sem saber qual banco está do outro lado — do mesmo jeito que uma tomada de parede aceita qualquer aparelho que tenha o plugue certo.
 
-**2. O sotaque que o segurança entende.** O validador de SQL é o segurança na porta que revista cada pedido antes de deixar entrar. Ele usa uma biblioteca chamada `sqlglot`, que lê o pedido em SQL e entende sua estrutura. O detalhe: hoje ele lê no sotaque Postgres. Em `src/db_mcp/guardrails/sql.py` está escrito, na prática, "interprete isto como Postgres" (`read="postgres"`). Se você mandar SQL no sotaque do SQL Server, o segurança pode não reconhecer o pedido direito.
+Hoje existem **três encaixes** nessa tomada, um arquivo cada: `dialetos/postgres.py`, `dialetos/mysql.py` e `dialetos/sqlserver.py`. Escolher o banco é um único ajuste na configuração (`DIALETO=postgres`, `mysql` ou `sqlserver`), e o `sqlglot` — a biblioteca que faz o papel do segurança na porta — já nasceu poliglota: ela lê SQL em dezenas de sotaques, e o validador passa a usar o sotaque certo (`postgres`, `mysql` ou `tsql`, o nome técnico do sotaque do SQL Server) automaticamente.
 
-**3. O jeito de olhar o catálogo.** Quando as ferramentas listam schemas, tabelas e colunas, elas consultam o "índice geral" do almoxarifado. No PostgreSQL o código faz isso pelo `information_schema` — e em `src/db_mcp/server.py` as consultas de introspecção batem exatamente aí. Boa notícia parcial: o `information_schema` é um padrão do SQL que o MySQL e o SQL Server também têm, então essas perguntas viajam melhor que o resto do código. A pegadinha é que os detalhes mudam de banco pra banco: o código, por exemplo, filtra os schemas de sistema do Postgres (`NOT LIKE 'pg_%'`), e a própria allowlist trata o `pg_catalog` — o catálogo de sistema, um nome que só existe no Postgres — como sempre-liberado (em `src/db_mcp/guardrails/policy.py`). Cada engine também descreve tipos e schemas do seu jeito. Ou seja: não é reescrever do zero, mas cada consulta precisa de revisão e teste por banco.
+### As pegadinhas reais — encontradas testando, não lendo código
 
-**4. O jeito de trancar em "somente-leitura".** "Somente-leitura" é a promessa central: pode olhar as fichas, não pode rasurar nem arrancar nenhuma. No PostgreSQL existe um comando elegante que declara uma transação inteira como "só leitura" — e o código usa exatamente isso (`conn.read_only = True`, no `db.py`). É um cadeado que o próprio banco oferece de fábrica. O MySQL também tem o seu (`START TRANSACTION READ ONLY`); o SQL Server é o que não oferece um botão tão limpo assim. Em ambos, a garantia acaba dependendo mais de como o usuário do banco foi criado — mas isso, veremos, vale para os três.
+Isto é o que a teoria não avisa. Em ambas as vezes (MySQL e SQL Server), o projeto encontrou bugs de verdade só ao rodar contra um banco vivo — nenhum deles seria óbvio só de olhar o código:
 
-Some a isso um detalhe: até os nomes na configuração são "postgres-centrados". No `src/db_mcp/config.py` os campos se chamam `db_host`, `db_port`, `db_dbname`, `db_user`. Tudo com o carimbo `pg`.
+- **Cada banco tranca a porta de um jeito bem diferente.** O PostgreSQL tem um cadeado de sessão completo (`default_transaction_read_only`, gravado no usuário, para sempre). O MySQL tem uma versão mais fraca, que vale só para a conexão da vez — e o próprio programa precisa religá-la toda vez que reaproveita uma conexão do pool. **O SQL Server não tem cadeado de sessão nenhum**: pedir "esta sessão é só leitura" dá erro de sintaxe, o comando nem existe ali. Isso mudou o desenho de verdade: no MySQL, o programa reaplica a trava a cada conexão emprestada do pool; no SQL Server, como não há trava nenhuma para reaplicar (e também não há como "limpar" uma conexão reciclada), o programa **abre uma conexão nova a cada consulta** em vez de reaproveitar — a conexão nova faz o papel da limpeza.
+- **Um bug real no jeito de cortar o tamanho da resposta.** O programa tem um limite automático de linhas (o `LIMIT`). Ele funcionava perfeitamente no Postgres e no MySQL, mas continha um atalho que, contra um SQL Server de verdade, deixava passar um `LIMIT` — sintaxe que **não existe** em T-SQL (lá o comando certo é `TOP`) — sem traduzir. O SQL Server recusava a consulta inteira. Só apareceu rodando o corpus de ataque contra o banco real pela primeira vez, e foi corrigido antes de seguir.
+- **As funções perigosas mudam de banco pra banco.** Cada dialeto tem sua própria lista negra: o Postgres teme `pg_read_file` e `dblink`; o MySQL teme `load_file` e `sleep`; o SQL Server teme `xp_cmdshell` (que roda comandos do sistema operacional) e um grupo de funções (`openrowset`, `opendatasource`) que conseguem alcançar **outros servidores** pela rede. Montar a lista certa para cada banco exigiu estudo específico — errar aqui abre buraco de segurança de verdade.
+- **O SQL Server vaza um pouco mais de "planta baixa" que os outros dois.** Medido: sem alguns ajustes extras na hora de criar o usuário (comandos `DENY`, além do `GRANT`), um login com permissão de leitura numa única tabela ainda enxerga a lista de todos os bancos daquela instância e de todos os outros usuários cadastrados — sem ler dado nenhum de conteúdo, mas reconhecimento de terreno de graça, algo que nem o Postgres nem o MySQL fazem. Por isso a receita de instalação do SQL Server, em [`docs/02-preparar-o-banco.md`](02-preparar-o-banco.md), inclui esses `DENY` como parte obrigatória, não como nota de rodapé.
 
-### O que joga a favor
+### O teste multiplicou — e hoje cobre os três de verdade
 
-Duas notícias boas encurtam bastante o caminho.
+Provar o mesmo comportamento em cada banco significa rodar a suíte inteira contra cada um deles, de verdade, não simulado. Isso é realidade hoje: o CI (a esteira automática que roda a cada mudança) sobe um PostgreSQL, um MySQL **e um SQL Server** de verdade e roda a suíte inteira contra os três, cada um com o seu próprio corpus de ataque.
 
-**O segurança já é poliglota — só não foi ativado.** A biblioteca `sqlglot`, que o validador usa, entende dezenas de sotaques de SQL. Não é promessa: a lista de dialetos que ela conhece tem cerca de 31 entradas, e nela estão tanto o `mysql` quanto o `tsql` (o nome técnico do sotaque do SQL Server). Ou seja, o segurança já nasceu sabendo os três idiomas. Hoje ele só recebeu ordem de escutar em um. Trocar o sotaque é, em boa parte, mudar uma configuração de "postgres" para "mysql" ou "tsql".
+### O que essa história ensina
 
-**Existem telefones prontos para os outros bancos.** Para MySQL há drivers Python maduros e populares, como o `mysqlclient` e o `PyMySQL`. Para SQL Server há o `pyodbc` e o `pymssql`. São peças de mercado, testadas por muita gente. Não é preciso inventar o telefone; é preciso escolher um e ligar os fios.
-
-### Um desenho realista do "MCP dinâmico"
-
-Junte as peças e aparece um plano concreto. Ele se apoia numa virtude que o projeto já tem: o "cérebro" é separado do "encanamento".
-
-No `server.py` existe uma peça chamada `Nucleo`, descrita no próprio código como algo que "junta guardrails + db" e é "independente do transporte". Traduzindo: a lógica de decisão (revistar o pedido, checar permissões, limitar tamanho) já mora numa caixa separada da caixa que conversa com o banco (a classe `Database`, no `db.py`). Essa separação é meio caminho andado.
-
-O desenho seria assim:
-
-**Um botão na configuração.** Um novo ajuste, algo como:
-
-```yaml
-db_engine: postgres   # postgres | mysql | mssql
-```
-
-Esse botão diz, na instalação, qual almoxarifado atender.
-
-**Uma "tomada universal" para o banco.** Em vez de uma única classe `Database` que só sabe Postgres, você define um contrato — "todo banco precisa saber conectar, executar um SELECT e devolver linhas" — e faz três implementações que encaixam nesse mesmo contrato: uma para Postgres (a de hoje), uma para MySQL, uma para SQL Server. O `Nucleo` continua falando com "o banco" sem saber qual é, do mesmo jeito que uma tomada aceita qualquer aparelho que tenha o plugue certo.
-
-**O segurança escolhe o sotaque certo.** O validador passa a ler o SQL no dialeto que combina com o `db_engine`: `postgres`, `mysql` ou `tsql`.
-
-**Cada banco com suas consultas de catálogo.** As perguntas de introspecção ("quais tabelas existem?") ganham uma versão por banco, cada uma ajustada às diferenças daquele almoxarifado.
-
-### As pegadinhas — e elas são reais
-
-Aqui a honestidade importa, porque é onde o trabalho se multiplica.
-
-**Cada banco tranca a porta de um jeito.** No PostgreSQL, aquele cadeado limpo de transação "só leitura" faz metade do serviço sozinho. No MySQL o recurso existe, mas é menos redondo; no SQL Server ele praticamente não existe. Nos três, no fim, a garantia de somente-leitura recai quase toda sobre **como o usuário do banco foi criado** — ou seja, sobre o cadeado mais forte de todos, que é dar ao usuário apenas permissão de olhar (o GRANT) e revogar o resto. Isso muda o roteiro de instalação de cada banco. Não dá pra copiar e colar as instruções do Postgres.
-
-**Os catálogos têm suas diferenças.** Descobrir "quais colunas essa tabela tem" se apoia no `information_schema`, que existe nos três bancos — então a base viaja. Mas cada engine tem suas gírias (o que conta como "schema", como os tipos aparecem, quais filtros de sistema aplicar), então cada consulta ainda precisa ser revista e testada por banco. É menos que reescrever do zero, mas não é copiar e colar.
-
-**As funções perigosas são outras.** O segurança mantém uma lista negra de funções que precisam ser barradas — comandos que, mesmo num pedido de leitura, conseguem ler arquivos do servidor, abrir conexões de rede ou travar o sistema. Cada dialeto traz a sua lista — as de Postgres (`pg_read_file`, `pg_sleep`, `dblink`) vivem em `dialetos/postgres.py`, as de MySQL (`load_file`, `sleep`, `benchmark`, os locks nomeados) em `dialetos/mysql.py`. Cada banco traz o seu próprio arsenal a bloquear — e aqui mora um alerta grande: o SQL Server tem uma função tristemente famosa chamada `xp_cmdshell`, capaz de **rodar comandos do sistema operacional** a partir de dentro do banco. O MySQL tem seus próprios truques, como escrever arquivos no disco do servidor. Montar a lista negra certa para cada banco exige estudo específico, e errar aqui abre buraco de segurança.
-
-**O teste e a auditoria multiplicam.** Provar o mesmo comportamento contra cada banco significa rodar a suíte inteira contra cada um deles, de verdade. **Isso já é realidade para dois:** o CI sobe um PostgreSQL e um MySQL e roda tudo contra os dois, cada um com o seu próprio corpus de ataque. Falta o terceiro. É trabalho honesto de garantia, não enfeite.
-
-### Veredito
-
-É viável, sim. E o mérito é do próprio desenho atual: como o cérebro (`Nucleo` + guardrails) já vive separado do encanamento (`Database`), dá pra encaixar novos bancos sem rasgar o código todo. A biblioteca do segurança (`sqlglot`) já é poliglota, e os drivers dos outros bancos existem e são maduros.
-
-Mas não se iluda com o tamanho. Não é virar uma chave. É desenhar a "tomada universal", escrever e testar três implementações de banco, montar três listas negras de funções perigosas com o cuidado que segurança exige, reescrever o roteiro de instalação para o modo de trancar de cada banco, e dobrar (ou triplicar) a bateria de testes. É um projeto de porte médio, feito com calma e com um banco de verdade de cada tipo na bancada — não um ajuste de uma tarde de sábado.
+Foi um projeto de porte médio em cada rodada, não um retoque de tarde — mas o "cérebro" separado do "encanamento" (a ideia da tomada universal) fez a diferença: o segundo banco custou pouco código novo (um arquivo de dialeto), e o terceiro também. O preço real não foi escrever a conexão nova — foi encontrar, testando contra bancos de verdade, as pegadinhas que nenhuma leitura de documentação teria avisado sozinha.
 
 ---
 
 ## Em uma frase, para fechar
 
 O db-mcp é um porteiro cuidadoso que deixa uma inteligência artificial **olhar** os
-dados de um banco PostgreSQL — nunca mexer neles. Ele foi construído partindo do princípio de
-que a IA vai errar, e mesmo assim mantém o caminho seguro: o próprio banco recusa qualquer
-escrita, a rede só deixa entrar quem é conhecido, e a aplicação revista cada pedido antes de
-servir. É honesto sobre os poucos limites que ainda tem, é fácil de instalar (na mão ou com o
-Claude conduzindo), e é simples o bastante para outra IA entender o projeto inteiro sozinha.
+dados de um banco PostgreSQL, MySQL ou SQL Server — nunca mexer neles. Ele foi construído
+partindo do princípio de que a IA vai errar, e mesmo assim mantém o caminho seguro: o próprio
+banco recusa qualquer escrita, a rede só deixa entrar quem é conhecido, e a aplicação revista
+cada pedido antes de servir. É honesto sobre os poucos limites que ainda tem — e sobre como
+esses limites mudam de banco para banco —, é fácil de instalar (na mão ou com o Claude
+conduzindo), e é simples o bastante para outra IA entender o projeto inteiro sozinha.
