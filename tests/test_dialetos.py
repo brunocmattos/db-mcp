@@ -1,6 +1,7 @@
 import pytest
 import sqlglot
 
+from db_mcp.config import Settings
 from db_mcp.dialetos import DIALETOS_IMPLEMENTADOS, obter_dialeto
 from db_mcp.dialetos.base import Perfil
 
@@ -105,3 +106,42 @@ def test_sqlserver_nao_reusa_conexao():
     assert len(abertas) == 2, "cada checkout tem que abrir uma conexão NOVA"
     assert c1 is not c2
     assert c1.fechada and c2.fechada, "a conexão tem que ser fechada ao sair do with"
+
+
+def test_sqlserver_timeout_para_o_driver_nunca_e_zero(monkeypatch, tmp_path):
+    """`statement_timeout_ms` abaixo de 1000 não pode virar `timeout=0` pro pymssql.
+
+    Medido no docstring de `pymssql.connect`: "query timeout in seconds, default 0
+    (no timeout)" — ali `0` não é "o mínimo possível", é "SEM timeout". A config
+    (`Settings.statement_timeout_ms`) não tem `Field(ge=...)`: um operador pode
+    legitimamente pedir 500ms, e `500 // 1000 == 0` desligaria o timeout em silêncio —
+    o mesmo padrão de falha ABERTA que a Fase 1 mediu no MySQL (`pool_reset_session`
+    zerando o `SET SESSION TRANSACTION READ ONLY` no checkout). O `max(1, ...)` em
+    `_conectar` é a defesa; este teste existe para impedir que uma limpeza de código o
+    troque de volta por divisão pura sem ninguém perceber.
+    """
+    d = dialeto_ou_skip("sqlserver")
+
+    monkeypatch.setenv("DB_HOST", "h")
+    monkeypatch.setenv("DB_DBNAME", "d")
+    monkeypatch.setenv("DB_PASSWORD", "p")
+    monkeypatch.setenv("STATEMENT_TIMEOUT_MS", "500")
+    s = Settings.load(env_file=None, yaml_file=str(tmp_path / "inexistente.yaml"))
+    assert s.statement_timeout_ms == 500  # a premissa do teste: abaixo de 1000
+
+    capturado: dict = {}
+
+    def _fake_connect(**kwargs):
+        capturado.update(kwargs)
+
+        class _FakeConn:
+            def close(self) -> None:
+                pass
+
+        return _FakeConn()
+
+    monkeypatch.setattr(d._pymssql, "connect", _fake_connect)
+
+    d.conectar_doctor(s)
+
+    assert capturado["timeout"] >= 1, "timeout=0 no pymssql significa SEM timeout"
