@@ -3,7 +3,7 @@ tipo: projeto
 cliente: interno
 produto: —
 no_ar: não
-atividade: ativo
+atividade: parado
 stack: ["Python 3.11+", "uv", "FastMCP", "psycopg3", "mysql-connector", "pymssql", "sqlglot"]
 ultima_atividade: 2026-07-21
 proxima_acao: "Fase 2 (SQL Server) CONCLUÍDA e verificada na branch refactor/fase-2-sqlserver (CI 8/8, doctor 6/6 nos TRÊS bancos). Decidir o merge pra main; depois corrigir o STATEMENT_TIMEOUT_MS=0, que desliga o timeout nos três dialetos"
