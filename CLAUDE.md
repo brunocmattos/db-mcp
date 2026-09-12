@@ -275,34 +275,5 @@ pra **3** (`master`/`tempdb`/o próprio — o piso do SQL Server, não dá pra z
 - [ ] Todo commit tem autor `<e-mail corporativo>`, ligando a identidade pública do GitHub
   ao empregador. Considerar `git config user.email` dedicado se a separação importar.
 
-## Pendências — auditoria 2026-08-20
-Verificado contra git + código real (não só docs). Segurança: **limpa** — nenhum segredo vivo
-no histórico completo (76 commits, `git log --all -p` sem hit real), demo creds são fake e
-rotuladas, `.gitignore` cobre `.env*`/`config.yaml`/`deployments/*`/`*.log`, e o GitHub confirma
-`private: false` (repo é mesmo público). As três fases (multi-dialeto, MySQL, SQL Server) batem
-com o código: núcleo dialeto-agnóstico confirmado em `dialetos/base.py`, o fix do
-`injetar_limit` (T6) confirmado em `guardrails/policy.py:115-133`, os dois fixes do `doctor.py`
-(`SELECT 1 AS um`, fallback de `.sqlstate`) confirmados em `doctor.py:268-353`, CI verde
-confirmado via API do GitHub no commit `c9e5f27` (HEAD da branch).
-### Erros / quebrado
-- [ ] `config.py:41` — `statement_timeout_ms: int = 5000` sem `Field(gt=0)`; `0`/negativo
-  desliga o timeout em silêncio nos três dialetos (repassado cru em `postgres.py:118` via
-  `options=f"-c statement_timeout={s.statement_timeout_ms}"` e em `mysql.py:85` via
-  `SET SESSION max_execution_time = {int(self._timeout_ms)}`). Já é backlog conhecido — só
-  confirmando que segue sem correção.
-- [ ] `main` (`2817312`/`v0.4.0`) está **21 commits atrás** de `refactor/fase-2-sqlserver`
-  (`__version__ 0.5.0`), parada desde 2026-07-21 — **exatos 30 dias sem merge**
-  (`git merge-base --is-ancestor` confirma que main NÃO tem a branch). Repo é público: quem
-  visita o GitHub hoje não vê o suporte a SQL Server, apesar de a Fase 2 estar fechada e verde.
-### Sugestões
-- [ ] Decidir o merge de `refactor/fase-2-sqlserver` → `main` (tag `v0.5.0`) — já é a
-  próxima ação declarada há 30 dias; o adiamento cresce o drift num repo público.
-- [ ] Apagar `refactor/fase-0-multi-dialeto` (local+remoto) — já incorporada ao main, é peso
-  morto (item já no Backlog).
-- [ ] Não existe `connections.md`; o equivalente vive espalhado em "Ambiente & acessos" +
-  `deployments/README.md`. Funciona para uma ferramenta sem deployment real, mas não há um
-  ponteiro único — considerar consolidar se o projeto ganhar um ambiente real registrado.
-- [ ] `audit.log` (173KB) e `audit-plusoft.log` (18KB, datado de hoje) existem no working
-  directory, corretamente git-ignorados (`*.log`) — não é achado de segurança, só nota: como
-  o diretório de trabalho é compartilhado entre sessões, confirmar que não guardam dado de
-  cliente antes de qualquer mudança futura no `.gitignore`.
+## Auditoria — 2026-09-12
+Laudo completo: [`auditoria.md`](auditoria.md)
