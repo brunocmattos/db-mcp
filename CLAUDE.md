@@ -1,4 +1,7 @@
 ---
+natureza: software
+dominio: ferramentas
+dono: meu
 tipo: projeto
 cliente: interno
 produto: —
